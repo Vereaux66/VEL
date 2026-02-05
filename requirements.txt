@@ -130,6 +130,8 @@ textblob==0.17.1
 vaderSentiment==3.3.2
 
 # Distributed Computing
+# SECURITY NOTE: ray has token auth disabled by default (no patch available).
+# In production, enable authentication via: RAY_USE_TLS=1 and configure ray.init(runtime_env={"env_vars": {"RAY_USE_TLS": "1"}})
 ray==2.52.0
 dask==2026.1.1
 distributed==2026.1.1
