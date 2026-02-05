@@ -1,0 +1,14 @@
+{
+    "enabled": false,
+    "dry_run": true,
+    "portfolio_value_usd": "100000",
+    "strict_risk_mode": true,
+    "max_position_size_pct": 0.1,
+    "max_slippage_bps": 100,
+    "check_interval": 300,
+    "broker": "kraken",
+    "watchlist": [
+        "BTC", "ETH", "SOL", "AVAX", "MATIC",
+        "ARB", "OP", "LINK", "UNI", "AAVE"
+    ]
+}

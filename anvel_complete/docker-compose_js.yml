@@ -1,0 +1,19 @@
+version: '3.8'
+services:
+  anvel-js:
+    image: node:22-alpine
+    working_dir: /app
+    volumes:
+      - ./:/app
+    command: node native/js_app/index.js
+    environment:
+      - ANVEL_LOG_STDOUT=1
+      - ANVEL_API_TOKEN=${ANVEL_API_TOKEN}
+      - KRAKEN_KEY=${KRAKEN_KEY}
+      - KRAKEN_SECRET=${KRAKEN_SECRET}
+      - COINBASE_KEY=${COINBASE_KEY}
+      - COINBASE_SECRET=${COINBASE_SECRET}
+      - COINBASE_PASSPHRASE=${COINBASE_PASSPHRASE}
+    ports:
+      - "8080:8080"
+    restart: unless-stopped

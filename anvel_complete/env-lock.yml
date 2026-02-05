@@ -1,0 +1,62 @@
+name: anvel
+description: |
+  Production runtime manifest after the PyTorch migration (November 2025).
+  This captures the Python 3.11.9 virtual environment located at `.venv311`
+  and replaces the previous Conda + TensorFlow stack.
+
+python:
+  version: "3.11.9"
+  implementation: "CPython"
+  executable: ".venv311/Scripts/python.exe"
+
+toolchain:
+  pip: "24.0"
+  setuptools: "65.5.0"
+  wheel: "0.45.1"
+
+channels: []
+
+dependencies:
+  pip:
+    # Core numerics remain available for third-party libraries, but ANVEL modules
+    # must continue to use Rust analytics or PyTorch tensors directly.
+    - numpy==1.25.2
+    - pandas==2.0.3
+    - scipy==1.16.3
+    - scikit-learn==1.3.0
+    - joblib==1.3.1
+
+    # PyTorch-only deep learning stack (TensorFlow removed entirely).
+    - torch==2.4.1+cpu
+    - torchvision==0.19.1+cpu
+    - transformers==4.31.0
+
+    # Gradient boosted models leveraged by ensemble components.
+    - xgboost==1.7.6
+    - lightgbm==4.0.0
+    - catboost==1.2
+
+    # DEX/DeFi Trading (VEL is DEX-only)
+    - ccxt==4.0.0
+    - websockets==11.0.3
+
+    # Storage + messaging
+    - redis==4.6.0
+    - psycopg2-binary==2.9.6
+    - pymongo==4.4.1
+
+    # Web / orchestration
+    - flask==2.3.2
+    - flask-socketio==5.3.4
+
+    # Utilities
+    - python-dotenv==1.0.0
+    - requests==2.31.0
+    - pyyaml==6.0.1
+
+policy:
+  numpy_usage: "First-party modules must *not* import numpy/pandas directly; rely on Rust pipelines or PyTorch tensors."
+  tensorflow: "Removed. Do not reintroduce TensorFlow / Keras without explicit approval."
+  verification: |
+    Full regression suite (`test_ultimate_system.py`) passes 25/25 using this environment.
+    When recreating the environment, run `python -m venv .venv311 && .venv311/Scripts/pip install -r requirements.txt`

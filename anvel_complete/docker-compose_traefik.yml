@@ -1,0 +1,55 @@
+services:
+  traefik:
+    image: traefik:v2.11
+    container_name: traefik
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.le.acme.tlschallenge=true
+      - --certificatesresolvers.le.acme.email=${LE_EMAIL}
+      - --certificatesresolvers.le.acme.storage=/letsencrypt/acme.json
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./letsencrypt:/letsencrypt
+    restart: unless-stopped
+
+  web:
+    image: nginx:alpine
+    container_name: anvel-web
+    volumes:
+      - ./public:/usr/share/nginx/html:ro
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.web.rule=Host(`${DOMAIN}`)
+      - traefik.http.routers.web.entrypoints=websecure
+      - traefik.http.routers.web.tls.certresolver=le
+      - traefik.http.middlewares.web-redirect.redirectscheme.scheme=https
+      - traefik.http.routers.web-80.rule=Host(`${DOMAIN}`)
+      - traefik.http.routers.web-80.entrypoints=web
+      - traefik.http.routers.web-80.middlewares=web-redirect
+    depends_on:
+      - traefik
+    restart: unless-stopped
+
+  anvel:
+    build: .
+    container_name: anvel
+    environment:
+      - PYTHONUTF8=1
+      - ANVEL_HYBRID_ENABLED=0
+    command: ["python", "anvel_ultimate_runtime.py"]
+    labels:
+      - traefik.enable=false
+      # When you add an API server listening on port 8000 inside this container,
+      # enable Traefik routing by setting enable=true and uncommenting the rules below:
+      # - traefik.enable=true
+      # - traefik.http.routers.api.rule=Host(`${DOMAIN}`) && PathPrefix(`/api`)
+      # - traefik.http.routers.api.entrypoints=websecure
+      # - traefik.http.routers.api.tls.certresolver=le
+      # - traefik.http.services.api.loadbalancer.server.port=8000
+    restart: unless-stopped

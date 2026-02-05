@@ -1,0 +1,149 @@
+version: "3.9"
+
+# ============================================================================
+# ANVEL AI Trading System - Docker Compose Configuration
+# ============================================================================
+# Local development environment with optional PostgreSQL and Redis
+# ============================================================================
+
+services:
+  # PostgreSQL Database (optional - for local development)
+  postgres:
+    image: postgres:16-alpine
+    container_name: anvel-postgres
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+      POSTGRES_DB: ${DB_NAME:-anvel}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./anvel_database_schema.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    profiles:
+      - local
+
+  # Redis Cache/Broker (optional - for local development)
+  redis:
+    image: redis:7-alpine
+    container_name: anvel-redis
+    command: redis-server --appendonly yes ${REDIS_PASSWORD:+--requirepass $REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    profiles:
+      - local
+
+  # Main ANVEL trading engine
+  anvel:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: anvel
+    env_file:
+      - .env
+    environment:
+      - PYTHONUTF8=1
+      - ANVEL_HYBRID_ENABLED=${ANVEL_HYBRID_ENABLED:-0}
+      - DB_HOST=${DB_HOST:-postgres}
+      - REDIS_HOST=${REDIS_HOST:-redis}
+    volumes:
+      - ./logs:/app/logs
+      - ./data:/app/data
+      - ./backups:/app/backups
+      - ./models:/app/models
+      - ./configs/anvel_config.json:/app/configs/anvel_config.json:ro
+      # Hot reload for development (comment out for production)
+      # - .:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["python", "launch_anel.py", "--no-wait"]
+    restart: unless-stopped
+    profiles:
+      - local
+
+  # Web interface with WebSocket support
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: anvel-web
+    env_file:
+      - .env
+    environment:
+      - PYTHONUTF8=1
+      - ANVEL_LOG_LEVEL=${ANVEL_LOG_LEVEL:-INFO}
+      - FLASK_ENV=${FLASK_ENV:-production}
+      - DB_HOST=${DB_HOST:-postgres}
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - WEBSOCKET_ENABLED=${WEBSOCKET_ENABLED:-true}
+    ports:
+      - "${WEB_PORT:-8080}:8080"
+    volumes:
+      - ./logs:/app/logs
+      # Hot reload for development (comment out for production)
+      # - .:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["python", "-m", "flask", "--app", "webapp.app", "run", "--host", "0.0.0.0", "--port", "8080", "--no-reload"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+  # BTCPay invoice scanner (background worker)
+  btcpay-scanner:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: anvel-btcpay-scanner
+    env_file:
+      - .env
+    environment:
+      - PYTHONUTF8=1
+      - DB_HOST=${DB_HOST:-postgres}
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - BTCPAY_SCAN_INTERVAL=${BTCPAY_SCAN_INTERVAL:-300}
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["python", "btcpay_scanner.py"]
+    restart: unless-stopped
+    profiles:
+      - btcpay
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  default:
+    name: anvel-network
