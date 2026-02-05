@@ -13,6 +13,7 @@ Production-critical module for decentralized trading.
 """
 
 import logging
+import threading
 from decimal import Decimal
 from typing import Any, Dict, Optional
 from web3 import Web3
@@ -139,6 +140,7 @@ class UniswapV3Broker(DEXBrokerBase):
         # Lazy-initialized contracts (no network call at init time)
         self._router = None
         self._quoter = None
+        self._contract_lock = threading.Lock()
 
         logger.info(
             f"Uniswap V3 broker configured for chain {chain_id}, "
@@ -147,22 +149,26 @@ class UniswapV3Broker(DEXBrokerBase):
 
     @property
     def router(self):
-        """Lazy-initialized router contract."""
+        """Lazy-initialized router contract (thread-safe)."""
         if self._router is None:
-            self._router = self.w3.eth.contract(
-                address=Web3.to_checksum_address(self.router_address),
-                abi=self.ROUTER_ABI
-            )
+            with self._contract_lock:
+                if self._router is None:
+                    self._router = self.w3.eth.contract(
+                        address=Web3.to_checksum_address(self.router_address),
+                        abi=self.ROUTER_ABI
+                    )
         return self._router
 
     @property
     def quoter(self):
-        """Lazy-initialized quoter contract."""
+        """Lazy-initialized quoter contract (thread-safe)."""
         if self._quoter is None:
-            self._quoter = self.w3.eth.contract(
-                address=Web3.to_checksum_address(self.quoter_address),
-                abi=self.QUOTER_ABI
-            )
+            with self._contract_lock:
+                if self._quoter is None:
+                    self._quoter = self.w3.eth.contract(
+                        address=Web3.to_checksum_address(self.quoter_address),
+                        abi=self.QUOTER_ABI
+                    )
         return self._quoter
 
     def get_quote(

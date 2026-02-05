@@ -13,6 +13,7 @@ Production-critical module for decentralized trading operations.
 """
 
 import logging
+import threading
 import time
 from decimal import Decimal
 from typing import Any, Dict, Optional
@@ -103,6 +104,7 @@ class DEXBrokerBase(BrokerBase):
         self._w3: Optional[Web3] = None
         self._account = None
         self._connection_verified = False
+        self._connect_lock = threading.Lock()
 
         logger.info(
             f"DEX broker configured for chain {chain_id} via {rpc_url}, "
@@ -112,32 +114,38 @@ class DEXBrokerBase(BrokerBase):
 
     @property
     def w3(self) -> Web3:
-        """Lazy-initialized Web3 connection."""
+        """Lazy-initialized Web3 connection (thread-safe)."""
         if self._w3 is None:
             self._connect()
         return self._w3
 
     @property
     def account(self):
-        """Lazy-initialized account."""
+        """Lazy-initialized account (thread-safe)."""
         if self._w3 is None:
             self._connect()
         return self._account
 
     def _connect(self) -> None:
         """
-        Establish Web3 connection on first use.
+        Establish Web3 connection on first use (thread-safe).
         
         This method is called lazily to avoid network calls during import/build.
+        Uses double-checked locking for thread safety.
         """
         if self._connection_verified:
             return
-
-        logger.info(f"Establishing Web3 connection to {self.rpc_url}...")
-        self._w3 = Web3(Web3.HTTPProvider(self.rpc_url))
         
-        if not self._w3.is_connected():
-            raise ConnectionError(f"Failed to connect to {self.rpc_url}")
+        with self._connect_lock:
+            # Double-check after acquiring lock
+            if self._connection_verified:
+                return
+
+            logger.info(f"Establishing Web3 connection to {self.rpc_url}...")
+            self._w3 = Web3(Web3.HTTPProvider(self.rpc_url))
+            
+            if not self._w3.is_connected():
+                raise ConnectionError(f"Failed to connect to {self.rpc_url}")
 
         # Verify chain ID matches
         actual_chain_id = self._w3.eth.chain_id
