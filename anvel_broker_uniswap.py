@@ -125,6 +125,10 @@ class UniswapV3Broker(DEXBrokerBase):
             router_address: Custom router address (defaults to mainnet)
             quoter_address: Custom quoter address (defaults to mainnet)
             **kwargs: Additional arguments passed to DEXBrokerBase
+        
+        Note:
+            Contract instances are lazy-initialized to avoid network calls
+            during import/build time.
         """
         super().__init__(rpc_url, private_key, chain_id, **kwargs)
 
@@ -132,20 +136,34 @@ class UniswapV3Broker(DEXBrokerBase):
         self.router_address = router_address or self.ROUTER_ADDRESS
         self.quoter_address = quoter_address or self.QUOTER_ADDRESS
 
-        # Initialize contracts
-        self.router = self.w3.eth.contract(
-            address=Web3.to_checksum_address(self.router_address),
-            abi=self.ROUTER_ABI
-        )
-        self.quoter = self.w3.eth.contract(
-            address=Web3.to_checksum_address(self.quoter_address),
-            abi=self.QUOTER_ABI
-        )
+        # Lazy-initialized contracts (no network call at init time)
+        self._router = None
+        self._quoter = None
 
         logger.info(
-            f"Uniswap V3 broker initialized on chain {chain_id}, "
-            f"router={self.router_address}"
+            f"Uniswap V3 broker configured for chain {chain_id}, "
+            f"router={self.router_address} (connection deferred)"
         )
+
+    @property
+    def router(self):
+        """Lazy-initialized router contract."""
+        if self._router is None:
+            self._router = self.w3.eth.contract(
+                address=Web3.to_checksum_address(self.router_address),
+                abi=self.ROUTER_ABI
+            )
+        return self._router
+
+    @property
+    def quoter(self):
+        """Lazy-initialized quoter contract."""
+        if self._quoter is None:
+            self._quoter = self.w3.eth.contract(
+                address=Web3.to_checksum_address(self.quoter_address),
+                abi=self.QUOTER_ABI
+            )
+        return self._quoter
 
     def get_quote(
         self,

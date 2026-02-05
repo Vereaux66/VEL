@@ -620,6 +620,10 @@ class SmartContractManager:
     - Transaction simulation and gas optimization
     - Comprehensive health monitoring
     - Circuit breaker protection
+    
+    Note:
+        Network connections are lazy-initialized on first use to avoid
+        network calls during import/build time.
     """
 
     def __init__(
@@ -641,6 +645,9 @@ class SmartContractManager:
             slippage_tolerance_bps: Slippage tolerance in basis points
             confirmation_blocks: Number of confirmations to wait
             enable_self_healing: Whether to enable self-healing
+        
+        Note:
+            Network connections are deferred until first use.
         """
         self.rpc_urls = rpc_urls
         self.private_key = private_key
@@ -649,21 +656,18 @@ class SmartContractManager:
         self.confirmation_blocks = confirmation_blocks
         self.enable_self_healing = enable_self_healing
 
-        # Web3 connections per chain
+        # Web3 connections per chain (lazy initialized)
         self._web3_instances: Dict[int, Web3] = {}
         self._current_rpc_index: Dict[int, int] = {}
+        self._connections_initialized = False
 
         # Contract instances
         self._contracts: Dict[Tuple[ContractType, int], Contract] = {}
         self._contract_configs: Dict[Tuple[ContractType, int], ContractConfig] = {}
 
-        # Account management
+        # Account management (lazy initialized)
         self._account = None
-        if private_key:
-            # Create a temporary web3 instance just for account creation
-            temp_w3 = Web3()
-            self._account = temp_w3.eth.account.from_key(private_key)
-            logger.info(f"Contract manager initialized with account: {self._account.address}")
+        self._account_initialized = False
 
         # Circuit breakers per contract
         self._circuit_breakers: Dict[Tuple[ContractType, int], CircuitBreaker] = {}
@@ -675,8 +679,40 @@ class SmartContractManager:
         # Thread safety
         self._lock = threading.RLock()
 
-        # Initialize connections
-        self._initialize_connections()
+        logger.info(
+            f"SmartContractManager configured for {len(rpc_urls)} chains "
+            "(connections deferred until first use)"
+        )
+
+    def _ensure_connections_initialized(self) -> None:
+        """Initialize connections on first use (lazy initialization)."""
+        if self._connections_initialized:
+            return
+        with self._lock:
+            if self._connections_initialized:
+                return
+            self._initialize_connections()
+            self._connections_initialized = True
+
+    def _ensure_account_initialized(self) -> None:
+        """Initialize account on first use (lazy initialization)."""
+        if self._account_initialized:
+            return
+        with self._lock:
+            if self._account_initialized:
+                return
+            if self.private_key:
+                # Create a temporary web3 instance just for account creation
+                temp_w3 = Web3()
+                self._account = temp_w3.eth.account.from_key(self.private_key)
+                logger.info(f"Contract manager account initialized: {self._account.address}")
+            self._account_initialized = True
+
+    @property
+    def account(self):
+        """Lazy-initialized account."""
+        self._ensure_account_initialized()
+        return self._account
 
     def _initialize_connections(self) -> None:
         """Initialize Web3 connections for all chains."""
@@ -716,6 +752,7 @@ class SmartContractManager:
 
     def _get_web3(self, chain_id: int) -> Web3:
         """Get Web3 instance for a chain, reconnecting if necessary."""
+        self._ensure_connections_initialized()
         with self._lock:
             w3 = self._web3_instances.get(chain_id)
             if w3 is None or not w3.is_connected():

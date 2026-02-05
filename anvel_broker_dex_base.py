@@ -86,6 +86,10 @@ class DEXBrokerBase(BrokerBase):
             max_gas_price_gwei: Maximum acceptable gas price in Gwei
             slippage_tolerance_bps: Maximum slippage in basis points (50 = 0.5%)
             confirmation_blocks: Number of confirmations to wait for
+        
+        Note:
+            Web3 connection is lazy-initialized on first use to avoid network calls
+            during import/build time in restricted environments.
         """
         super().__init__()
         self.rpc_url = rpc_url
@@ -95,30 +99,62 @@ class DEXBrokerBase(BrokerBase):
         self.slippage_tolerance_bps = slippage_tolerance_bps
         self.confirmation_blocks = confirmation_blocks
 
-        # Initialize Web3 connection
-        self.w3 = Web3(Web3.HTTPProvider(rpc_url))
-        if not self.w3.is_connected():
-            raise ConnectionError(f"Failed to connect to {rpc_url}")
+        # Lazy-initialized Web3 connection (no network call at init time)
+        self._w3: Optional[Web3] = None
+        self._account = None
+        self._connection_verified = False
+
+        logger.info(
+            f"DEX broker configured for chain {chain_id} via {rpc_url}, "
+            f"slippage={slippage_tolerance_bps}bps, max_gas={max_gas_price_gwei}gwei "
+            "(connection deferred until first use)"
+        )
+
+    @property
+    def w3(self) -> Web3:
+        """Lazy-initialized Web3 connection."""
+        if self._w3 is None:
+            self._connect()
+        return self._w3
+
+    @property
+    def account(self):
+        """Lazy-initialized account."""
+        if self._w3 is None:
+            self._connect()
+        return self._account
+
+    def _connect(self) -> None:
+        """
+        Establish Web3 connection on first use.
+        
+        This method is called lazily to avoid network calls during import/build.
+        """
+        if self._connection_verified:
+            return
+
+        logger.info(f"Establishing Web3 connection to {self.rpc_url}...")
+        self._w3 = Web3(Web3.HTTPProvider(self.rpc_url))
+        
+        if not self._w3.is_connected():
+            raise ConnectionError(f"Failed to connect to {self.rpc_url}")
 
         # Verify chain ID matches
-        actual_chain_id = self.w3.eth.chain_id
-        if actual_chain_id != chain_id:
+        actual_chain_id = self._w3.eth.chain_id
+        if actual_chain_id != self.chain_id:
             raise ValueError(
-                f"Chain ID mismatch: expected {chain_id}, got {actual_chain_id}"
+                f"Chain ID mismatch: expected {self.chain_id}, got {actual_chain_id}"
             )
 
         # Set account if private key provided
-        self.account = None
-        if private_key:
-            self.account = self.w3.eth.account.from_key(private_key)
-            logger.info(f"DEX broker initialized with account: {self.account.address}")
+        if self.private_key:
+            self._account = self._w3.eth.account.from_key(self.private_key)
+            logger.info(f"DEX broker connected with account: {self._account.address}")
         else:
-            logger.warning("DEX broker initialized without private key - read-only mode")
+            logger.warning("DEX broker connected without private key - read-only mode")
 
-        logger.info(
-            f"DEX broker connected to chain {chain_id} via {rpc_url}, "
-            f"slippage={slippage_tolerance_bps}bps, max_gas={max_gas_price_gwei}gwei"
-        )
+        self._connection_verified = True
+        logger.info(f"DEX broker connected to chain {self.chain_id}")
 
     def _get_token_contract(self, token_address: str) -> Contract:
         """Get ERC-20 token contract instance."""

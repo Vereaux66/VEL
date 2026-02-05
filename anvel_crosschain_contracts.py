@@ -467,20 +467,21 @@ class CrosschainContractManager:
             max_retry_attempts: Maximum number of retry attempts for failed operations
             retry_backoff_seconds: Base backoff time for exponential retry
             
-        Raises:
-            ChainConfigurationError: If configuration validation fails
+        Note:
+            Network connections are lazy-initialized on first use to avoid
+            network calls during import/build time.
         """
         self.chain_configs = chain_configs
         self.private_key = private_key
         self.max_retry_attempts = max_retry_attempts
         self.retry_backoff_seconds = retry_backoff_seconds
 
-        # Validate all configurations
+        # Validate all configurations (no network calls)
         self._validate_configurations()
 
-        # Initialize Web3 instances for each chain
+        # Web3 instances (lazy initialized)
         self.web3_instances: Dict[ChainType, Web3] = {}
-        self._initialize_web3_instances()
+        self._web3_initialized = False
 
         # State management
         self._lock = threading.RLock()
@@ -493,12 +494,24 @@ class CrosschainContractManager:
         self._htlc_contracts: Dict[ChainType, Optional[Contract]] = {}
 
         logger.info(
-            "CrosschainContractManager initialized",
-            extra={
-                "chains": [c.value for c in chain_configs.keys()],
-                "max_retry_attempts": max_retry_attempts,
-            }
+            f"CrosschainContractManager configured for {len(chain_configs)} chains "
+            "(connections deferred until first use)"
         )
+
+    def _ensure_web3_initialized(self) -> None:
+        """Initialize Web3 connections on first use (lazy initialization)."""
+        if self._web3_initialized:
+            return
+        with self._lock:
+            if self._web3_initialized:
+                return
+            self._initialize_web3_instances()
+            self._web3_initialized = True
+
+    def _get_web3(self, chain: ChainType) -> Web3:
+        """Get Web3 instance for a chain, ensuring initialization."""
+        self._ensure_web3_initialized()
+        return self.web3_instances[chain]
 
     def _validate_configurations(self) -> None:
         """Validate all chain configurations at startup."""
@@ -573,7 +586,7 @@ class CrosschainContractManager:
                 self._bridge_contracts[chain] = None
                 return None
 
-            web3 = self.web3_instances[chain]
+            web3 = self._get_web3(chain)
             address = Web3.to_checksum_address(config.bridge_contract_address)
             self._bridge_contracts[chain] = web3.eth.contract(
                 address=address,
@@ -590,7 +603,7 @@ class CrosschainContractManager:
                 self._htlc_contracts[chain] = None
                 return None
 
-            web3 = self.web3_instances[chain]
+            web3 = self._get_web3(chain)
             address = Web3.to_checksum_address(config.htlc_contract_address)
             self._htlc_contracts[chain] = web3.eth.contract(
                 address=address,
@@ -658,7 +671,7 @@ class CrosschainContractManager:
         Raises:
             BridgeTransferError: If transaction fails or times out
         """
-        web3 = self.web3_instances[chain]
+        web3 = self._get_web3(chain)
         config = self.chain_configs[chain]
         confirmations = required_confirmations or config.block_confirmations
 
@@ -810,7 +823,7 @@ class CrosschainContractManager:
         if not self.private_key:
             raise BridgeTransferError("Private key required for transaction signing")
 
-        web3 = self.web3_instances[source_chain]
+        web3 = self._get_web3(source_chain)
 
         # Derive sender address if not provided
         if not sender_address:
@@ -1002,7 +1015,7 @@ class CrosschainContractManager:
         if not self.private_key:
             raise BridgeTransferError("Private key required for transaction signing")
 
-        web3 = self.web3_instances[transfer.destination_chain]
+        web3 = self._get_web3(transfer.destination_chain)
         account = web3.eth.account.from_key(self.private_key)
 
         logger.info(
@@ -1213,7 +1226,7 @@ class CrosschainContractManager:
         if not self.private_key:
             raise HTLCCreationError("Private key required for transaction signing")
 
-        web3 = self.web3_instances[chain]
+        web3 = self._get_web3(chain)
 
         # Derive sender address if not provided
         if not sender_address:
@@ -1413,7 +1426,7 @@ class CrosschainContractManager:
         if not self.private_key:
             raise HTLCRedemptionError("Private key required for transaction signing")
 
-        web3 = self.web3_instances[htlc.chain]
+        web3 = self._get_web3(htlc.chain)
 
         # Derive redeemer address if not provided
         if not redeemer_address:
@@ -1536,7 +1549,7 @@ class CrosschainContractManager:
         if not self.private_key:
             raise HTLCRefundError("Private key required for transaction signing")
 
-        web3 = self.web3_instances[htlc.chain]
+        web3 = self._get_web3(htlc.chain)
 
         # Derive sender address if not provided
         if not sender_address:
