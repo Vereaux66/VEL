@@ -1,0 +1,308 @@
+# ═══════════════════════════════════════════════════════════════════════════
+#  VEL/ANVEL PRODUCTION DEPLOYMENT ORCHESTRATION
+# ═══════════════════════════════════════════════════════════════════════════
+#
+#  This is the SINGLE authoritative deployment compose for production.
+#  It replaces fragmented docker-compose.yml / docker-compose.aws.yml.
+#
+#  Services:
+#    1. postgres        — Database (with init schema)
+#    2. redis           — Cache/broker
+#    3. anvel-engine    — Core trading engine (safety kernel → risk kernel → trade)
+#    4. anvel-web       — Web dashboard + API gateway
+#    5. anvel-monitor   — Health monitoring + Prometheus metrics
+#    6. rust-gateway    — Rust intent gateway (optional, high-throughput)
+#
+#  All services have:
+#    - Health checks with start_period for boot tolerance
+#    - Restart policies (on-failure with backoff)
+#    - Dependency ordering (depends_on with condition: service_healthy)
+#    - Resource limits
+#    - Readiness verification
+#
+#  Usage:
+#    docker-compose -f docker-compose.production.yml up -d
+#    docker-compose -f docker-compose.production.yml ps
+#    docker-compose -f docker-compose.production.yml logs -f anvel-engine
+#
+# ═══════════════════════════════════════════════════════════════════════════
+
+version: "3.9"
+
+x-common-env: &common-env
+  PYTHONUTF8: "1"
+  PYTHONUNBUFFERED: "1"
+  TZ: "UTC"
+  ANVEL_LOG_LEVEL: ${ANVEL_LOG_LEVEL:-INFO}
+  DB_HOST: postgres
+  DB_PORT: "5432"
+  DB_USER: ${DB_USER:-postgres}
+  DB_PASSWORD: ${DB_PASSWORD:-changeme}
+  DB_NAME: ${DB_NAME:-anvel}
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+
+x-restart-policy: &restart-policy
+  restart: on-failure
+  deploy:
+    restart_policy:
+      condition: on-failure
+      delay: 5s
+      max_attempts: 10
+      window: 120s
+
+x-resource-limits: &resource-limits-standard
+  deploy:
+    resources:
+      limits:
+        cpus: "2.0"
+        memory: 4G
+      reservations:
+        cpus: "0.5"
+        memory: 1G
+
+services:
+  # ─────────────────────────────────────────────────────────────
+  #  INFRASTRUCTURE TIER
+  # ─────────────────────────────────────────────────────────────
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: vel-postgres
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+      POSTGRES_DB: ${DB_NAME:-anvel}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./anvel_database_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./migrations:/docker-entrypoint-initdb.d/migrations:ro
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-anvel}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    <<: *restart-policy
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 2G
+        reservations:
+          cpus: "0.25"
+          memory: 512M
+
+  redis:
+    image: redis:7-alpine
+    container_name: vel-redis
+    command: >
+      redis-server
+        --appendonly yes
+        --maxmemory 512mb
+        --maxmemory-policy allkeys-lru
+        ${REDIS_PASSWORD:+--requirepass $REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    <<: *restart-policy
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 768M
+        reservations:
+          cpus: "0.1"
+          memory: 256M
+
+  # ─────────────────────────────────────────────────────────────
+  #  CORE TRADING ENGINE
+  # ─────────────────────────────────────────────────────────────
+
+  anvel-engine:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vel-engine
+    env_file:
+      - .env
+    environment:
+      <<: *common-env
+      ANVEL_SERVICE_ROLE: engine
+      ANVEL_SAFETY_STRICT_MODE: "1"
+      ANVEL_RISK_STRICT_MODE: "1"
+      ANVEL_HYBRID_ENABLED: ${ANVEL_HYBRID_ENABLED:-0}
+    volumes:
+      - engine_logs:/app/logs
+      - engine_data:/app/data
+      - engine_models:/app/models
+      - engine_backups:/app/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # Boot sequence: SafetyKernel → RiskKernel → StateLedger → TradeEngine
+    command: ["python", "run.py"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os, time; hb='/app/data/.engine_heartbeat'; assert os.path.exists(hb) and (time.time() - os.path.getmtime(hb)) < 60, 'stale heartbeat'"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 120s  # Trading engine needs time to load ML models
+    <<: *restart-policy
+    <<: *resource-limits-standard
+
+  # ─────────────────────────────────────────────────────────────
+  #  WEB DASHBOARD + API GATEWAY
+  # ─────────────────────────────────────────────────────────────
+
+  anvel-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vel-web
+    env_file:
+      - .env
+    environment:
+      <<: *common-env
+      ANVEL_SERVICE_ROLE: web
+      FLASK_ENV: production
+      WEBSOCKET_ENABLED: "true"
+    ports:
+      - "${WEB_PORT:-8080}:8080"
+    volumes:
+      - engine_logs:/app/logs:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      python -m gunicorn
+        --bind 0.0.0.0:8080
+        --workers 4
+        --worker-class eventlet
+        --timeout 120
+        --access-logfile -
+        --error-logfile -
+        "webapp.app:create_app()"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    <<: *restart-policy
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 2G
+        reservations:
+          cpus: "0.25"
+          memory: 512M
+
+  # ─────────────────────────────────────────────────────────────
+  #  HEALTH MONITOR + METRICS
+  # ─────────────────────────────────────────────────────────────
+
+  anvel-monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vel-monitor
+    env_file:
+      - .env
+    environment:
+      <<: *common-env
+      ANVEL_SERVICE_ROLE: monitor
+      PROMETHEUS_METRICS_PORT: "9090"
+    ports:
+      - "${METRICS_PORT:-9090}:9090"
+    volumes:
+      - engine_logs:/app/logs:ro
+    depends_on:
+      anvel-engine:
+        condition: service_healthy
+    command: ["python", "-c", "from anvel_monitoring import ANVELHealthMonitor; m = ANVELHealthMonitor(); m.serve_metrics(port=9090)"]
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:9090/metrics"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    <<: *restart-policy
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          cpus: "0.1"
+          memory: 128M
+
+  # ─────────────────────────────────────────────────────────────
+  #  RUST INTENT GATEWAY (optional high-throughput path)
+  # ─────────────────────────────────────────────────────────────
+
+  rust-gateway:
+    build:
+      context: ./native/rust_gateway
+      dockerfile: Dockerfile
+    container_name: vel-rust-gateway
+    environment:
+      RUST_LOG: info
+      GATEWAY_PORT: "50052"
+      BACKEND_URL: "http://anvel-engine:8080"
+    ports:
+      - "${GATEWAY_PORT:-50052}:50052"
+    depends_on:
+      anvel-engine:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:50052/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    <<: *restart-policy
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+    profiles:
+      - rust  # Only starts with: docker-compose --profile rust up
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  engine_logs:
+    driver: local
+  engine_data:
+    driver: local
+  engine_models:
+    driver: local
+  engine_backups:
+    driver: local
+
+networks:
+  default:
+    name: vel-network
+    driver: bridge

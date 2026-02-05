@@ -1,0 +1,7 @@
+{
+    "log_level": "INFO",
+    "data_dir": "data",
+    "single_node_mode": true,
+    "max_workers": 8,
+    "environment": "development"
+}

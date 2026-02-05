@@ -1,0 +1,9 @@
+{
+    "enabled": true,
+    "learning_enabled": true,
+    "anomaly_detection": true,
+    "learning_rate": 0.01,
+    "ema_alpha": 0.1,
+    "max_samples": 10000,
+    "codebase_awareness": false
+}

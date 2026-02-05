@@ -1,0 +1,173 @@
+version: "3.9"
+
+services:
+  # PostgreSQL database with TimescaleDB extension
+  postgres:
+    image: timescale/timescaledb:latest-pg15
+    container_name: anvel-postgres
+    environment:
+      POSTGRES_DB: anvel
+      POSTGRES_USER: anveladmin
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-AnvelSecure2024!}
+      POSTGRES_INITDB_ARGS: "-E UTF8"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./anvel_database_schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U anveladmin -d anvel"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - anvel-network
+
+  # Redis for caching and real-time data
+  redis:
+    image: redis:7-alpine
+    container_name: anvel-redis
+    command: redis-server --requirepass ${REDIS_PASSWORD:-AnvelRedis2024!} --maxmemory 512mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - anvel-network
+
+  # ANVEL core trading engine
+  anvel-core:
+    build:
+      context: .
+      dockerfile: Dockerfile.local
+    container_name: anvel-core
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONUTF8=1
+      - ANVEL_LOG_LEVEL=${ANVEL_LOG_LEVEL:-INFO}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=anvel
+      - POSTGRES_USER=anveladmin
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-AnvelSecure2024!}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-AnvelRedis2024!}
+      - ANVEL_MODE=${ANVEL_MODE:-demo}
+      # DEX/DeFi Configuration (VEL is DEX-only)
+      - BSC_RPC_URL=${BSC_RPC_URL:-https://bsc-dataseed1.bnbchain.org/}
+      - ETH_RPC_URL=${ETH_RPC_URL:-}
+    volumes:
+      - ./logs:/app/logs
+      - ./data:/app/data
+      - ./backups:/app/backups
+      - ./configs:/app/configs:ro
+      - ml-models:/app/models
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["python", "run.py"]
+    restart: unless-stopped
+    networks:
+      - anvel-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ANVEL web application
+  anvel-web:
+    build:
+      context: .
+      dockerfile: Dockerfile.local
+    container_name: anvel-web
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONUTF8=1
+      - ANVEL_LOG_LEVEL=${ANVEL_LOG_LEVEL:-INFO}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=anvel
+      - POSTGRES_USER=anveladmin
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-AnvelSecure2024!}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-AnvelRedis2024!}
+      - ANVEL_WEB_PASSWORD=${ANVEL_WEB_PASSWORD:?ANVEL_WEB_PASSWORD must be set in environment}
+      - FLASK_APP=webapp.app
+      - FLASK_ENV=${FLASK_ENV:-production}
+    ports:
+      - "8080:8080"
+      - "5000:5000"
+    volumes:
+      - ./logs:/app/logs
+      - ./webapp:/app/webapp:ro
+      - ./static:/app/static:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      anvel-core:
+        condition: service_started
+    command: ["python", "-m", "flask", "run", "--host", "0.0.0.0", "--port", "8080"]
+    restart: unless-stopped
+    networks:
+      - anvel-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Node.js server for WebSocket and real-time features
+  anvel-nodejs:
+    build:
+      context: .
+      dockerfile: Dockerfile.nodejs
+    container_name: anvel-nodejs
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-AnvelRedis2024!}
+      - WS_PORT=3000
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./webapp:/app/webapp:ro
+      - ./public:/app/public:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: ["node", "webapp/anvel_server.js"]
+    restart: unless-stopped
+    networks:
+      - anvel-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres-data:
+    driver: local
+  redis-data:
+    driver: local
+  ml-models:
+    driver: local
+
+networks:
+  anvel-network:
+    driver: bridge

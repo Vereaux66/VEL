@@ -1,0 +1,8 @@
+{
+    "heartbeat_interval": 10,
+    "health_check_interval": 30,
+    "watchdog_timeout": 60,
+    "metrics_enabled": true,
+    "alerts_enabled": true,
+    "max_consecutive_failures": 3
+}

@@ -1,0 +1,25 @@
+{
+    "default_network": "ethereum",
+    "use_testnets": false,
+    "enabled_networks": [
+        "ethereum",
+        "arbitrum",
+        "optimism",
+        "polygon",
+        "base"
+    ],
+    "gas_settings": {
+        "ethereum": {
+            "default_gwei": 30,
+            "max_gwei": 500
+        },
+        "arbitrum": {
+            "default_gwei": 0.1,
+            "max_gwei": 5
+        },
+        "polygon": {
+            "default_gwei": 50,
+            "max_gwei": 1000
+        }
+    }
+}

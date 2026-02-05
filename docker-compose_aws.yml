@@ -1,0 +1,14 @@
+services:
+  anvel:
+    image: ${ECR_IMAGE:-123456789012.dkr.ecr.us-east-1.amazonaws.com/anvel:latest}
+    environment:
+      - PYTHONUTF8=1
+      - ANVEL_HYBRID_ENABLED=0
+    command: ["python", "run.py"]
+    logging:
+      driver: awslogs
+      options:
+        awslogs-region: ${AWS_REGION:-us-east-1}
+        awslogs-group: ${AWS_LOG_GROUP:-/ecs/anvel}
+        awslogs-stream-prefix: anvel
+    restart: unless-stopped
