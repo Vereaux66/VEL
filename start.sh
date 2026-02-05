@@ -91,15 +91,10 @@ activate_python() {
 
 # Start the system
 start_system() {
-    log_info "Starting VEL Trading System..."
+    log_info "Starting VEL Trading System via unified launcher..."
     
-    # Check which components to start
-    MODE="${ANVEL_MODE:-demo}"
-    
-    log_info "Mode: $MODE"
-    
-    # Start the main Python system
-    python3 anvel_bootstrap.py
+    # Use the single launch authority
+    python3 run.py
 }
 
 # Main

@@ -75,7 +75,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: ["python", "ANVEL_MASTER.py"]
+    command: ["python", "run.py"]
     restart: unless-stopped
     networks:
       - anvel-network

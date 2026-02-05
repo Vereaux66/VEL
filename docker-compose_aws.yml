@@ -4,7 +4,7 @@ services:
     environment:
       - PYTHONUTF8=1
       - ANVEL_HYBRID_ENABLED=0
-    command: ["python", "anvel_ultimate_runtime.py"]
+    command: ["python", "run.py"]
     logging:
       driver: awslogs
       options:

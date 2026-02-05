@@ -42,7 +42,7 @@ services:
     environment:
       - PYTHONUTF8=1
       - ANVEL_HYBRID_ENABLED=0
-    command: ["python", "anvel_ultimate_runtime.py"]
+    command: ["python", "run.py"]
     labels:
       - traefik.enable=false
       # When you add an API server listening on port 8000 inside this container,
