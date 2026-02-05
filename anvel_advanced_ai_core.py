@@ -369,12 +369,12 @@ class AdvancedTrainingEngine:
         total_pnl = sum(t.get('pnl', 0) for t in trades)
 
         # Calculate Sharpe ratio
-        TRADING_DAYS_PER_YEAR = 252  # Standard trading days for annualization
+        US_TRADING_DAYS_PER_YEAR = 252  # Approximate number of US equity market trading days per year
         returns = [t.get('pnl', 0) for t in trades]
         if returns and len(returns) > 1:
             avg_return = statistics.mean(returns)
             std_return = statistics.stdev(returns)
-            sharpe = (avg_return / std_return * (TRADING_DAYS_PER_YEAR ** 0.5)) if std_return > 0 else 0.0
+            sharpe = (avg_return / std_return * (US_TRADING_DAYS_PER_YEAR ** 0.5)) if std_return > 0 else 0.0
         else:
             sharpe = 0.0
 

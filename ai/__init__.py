@@ -12,6 +12,8 @@ Modules:
 - introspection: System introspection and analysis
 """
 
+import logging
+
 # Core imports with fallback for missing dependencies
 try:
     from .core import (
@@ -23,7 +25,6 @@ try:
         SystemHealth,
     )
 except ImportError as e:
-    import logging
     logging.getLogger("ai").warning(f"Core AI module import error: {e}")
     
     # Provide stubs
