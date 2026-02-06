@@ -70,12 +70,13 @@ resource "aws_security_group" "vel_alb" {
 }
 
 # HTTPS Listener
+# NOTE: Uses certificate defined in route53.tf (aws_acm_certificate.vel_tls)
 resource "aws_lb_listener" "vel_https" {
   load_balancer_arn = aws_lb.vel_api.arn
   port              = "443"
   protocol          = "HTTPS"
   ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
-  certificate_arn   = aws_acm_certificate.vel_api.arn
+  certificate_arn   = aws_acm_certificate.vel_tls.arn
 
   default_action {
     type             = "forward"
@@ -133,56 +134,15 @@ resource "aws_lb_target_group" "vel_api" {
   }
 }
 
-# ACM Certificate
-resource "aws_acm_certificate" "vel_api" {
-  domain_name               = var.vel_dns_zone
-  subject_alternative_names = ["*.${var.vel_dns_zone}"]
-  validation_method         = "DNS"
+# NOTE: ACM Certificate and DNS validation for this certificate is managed in route53.tf
+# to avoid duplication. See aws_acm_certificate.vel_tls in route53.tf.
 
-  tags = {
-    Name        = "vel-api-cert"
-    Component   = "VEL-Network"
-    Environment = var.vel_env_name
-  }
-
-  lifecycle {
-    create_before_destroy = true
-  }
-}
-
-# DNS validation for certificate
-resource "aws_route53_record" "vel_cert_validation" {
-  for_each = {
-    for dvo in aws_acm_certificate.vel_api.domain_validation_options : dvo.domain_name => {
-      name   = dvo.resource_record_name
-      record = dvo.resource_record_value
-      type   = dvo.resource_record_type
-    }
-  }
-
-  allow_overwrite = true
-  name            = each.value.name
-  records         = [each.value.record]
-  ttl             = 60
-  type            = each.value.type
-  zone_id         = data.aws_route53_zone.vel.zone_id
-}
-
-# Certificate validation
-resource "aws_acm_certificate_validation" "vel_api" {
-  certificate_arn         = aws_acm_certificate.vel_api.arn
-  validation_record_fqdns = [for record in aws_route53_record.vel_cert_validation : record.fqdn]
-}
-
-# Route53 zone data source
-data "aws_route53_zone" "vel" {
-  name         = var.vel_dns_zone
-  private_zone = false
-}
+# NOTE: Route53 hosted zone data source is defined in route53.tf as data.aws_route53_zone.vel_zone.
+# The hosted zone must exist before applying this configuration.
 
 # Route53 A record for API
 resource "aws_route53_record" "vel_api" {
-  zone_id = data.aws_route53_zone.vel.zone_id
+  zone_id = data.aws_route53_zone.vel_zone.zone_id
   name    = var.vel_dns_zone
   type    = "A"
 
@@ -195,7 +155,7 @@ resource "aws_route53_record" "vel_api" {
 
 # Route53 A record for API subdomain
 resource "aws_route53_record" "vel_api_sub" {
-  zone_id = data.aws_route53_zone.vel.zone_id
+  zone_id = data.aws_route53_zone.vel_zone.zone_id
   name    = "api.${var.vel_dns_zone}"
   type    = "A"
 

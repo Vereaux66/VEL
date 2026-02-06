@@ -122,7 +122,7 @@ variable "vel_enable_secrets_rotation" {
 # =============================================================================
 
 variable "vel_waf_rate_limit" {
-  description = "WAF rate limit (requests per 5 minutes per IP)"
+  description = "WAF rate limit: maximum requests allowed per IP address within a 5-minute rolling window. AWS WAF aggregates by IP (aggregate_key_type = IP)."
   type        = number
   default     = 2000
 }

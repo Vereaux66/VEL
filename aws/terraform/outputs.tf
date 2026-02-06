@@ -40,7 +40,7 @@ output "vel_public_subnets" {
 
 output "vel_certificate_arn" {
   description = "ARN of the VEL TLS certificate"
-  value       = aws_acm_certificate.vel_api.arn
+  value       = aws_acm_certificate.vel_tls.arn
 }
 
 # =============================================================================

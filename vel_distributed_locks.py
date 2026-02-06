@@ -338,33 +338,109 @@ class DistributedLockManager:
     def _would_cause_deadlock(self, new_lock_key: str) -> bool:
         """
         Check if acquiring this lock would cause a deadlock.
-        
-        TODO: Implement full deadlock detection algorithm.
-        Current implementation is a placeholder that always returns False.
-        A proper implementation would:
-        1. Build a wait-for graph of lock dependencies
-        2. Detect cycles in the graph
-        3. Return True if adding this lock would create a cycle
-        
-        For now, rely on lock timeouts to prevent infinite deadlocks.
+
+        This implementation builds a simple lock dependency graph based on
+        observed lock acquisition order across all owners in this process.
+
+        - When an owner acquires lock B while already holding lock A, we record
+          a dependency edge A -> B.
+        - Before allowing the current owner to acquire `new_lock_key`, we
+          check whether there is any path from `new_lock_key` back to any
+          lock the owner already holds. If so, adding edges from those held
+          locks to `new_lock_key` would introduce a cycle and we report a
+          potential deadlock.
+
+        Note: This is a best-effort, in-process detector. Full distributed
+        deadlock detection would require coordination across processes and
+        is beyond the scope of this module.
         """
-        # Placeholder - full implementation would require distributed
-        # coordination to track which processes are waiting for which locks
-        return False
+        # Lazy initialization in case attributes were not set up in __init__
+        if not hasattr(self, "_lock_order"):
+            self._lock_order: Dict[str, List[str]] = {}
+        if not hasattr(self, "_lock_dependency_graph"):
+            # Maps from_lock_key -> set of to_lock_keys
+            self._lock_dependency_graph: Dict[str, Set[str]] = {}
+
+        # If the current owner holds no locks, acquiring a new one cannot
+        # introduce a cycle.
+        current_locks = self._lock_order.get(self._owner_id, [])
+        if not current_locks:
+            return False
+
+        dependency_graph = self._lock_dependency_graph
+
+        # Depth-first search to see if `start` can reach any lock in `targets`.
+        def _can_reach_any(start: str, targets: Set[str]) -> bool:
+            if start in targets:
+                return True
+            visited: Set[str] = set()
+            stack = [start]
+            while stack:
+                node = stack.pop()
+                if node in visited:
+                    continue
+                visited.add(node)
+                if node in targets:
+                    return True
+                for neighbor in dependency_graph.get(node, ()):
+                    if neighbor not in visited:
+                        stack.append(neighbor)
+            return False
+
+        # Treat each currently held lock as if it would gain an edge to
+        # `new_lock_key`. If `new_lock_key` can already reach any of those
+        # locks via existing dependencies, adding such an edge would create
+        # a cycle.
+        held_locks_set: Set[str] = set(current_locks)
+        return _can_reach_any(new_lock_key, held_locks_set)
     
     def _record_lock_order(self, lock_key: str) -> None:
         """Record lock acquisition order for deadlock detection."""
+        # Lazy initialization in case attributes were not set up in __init__
+        if not hasattr(self, "_lock_order"):
+            self._lock_order: Dict[str, List[str]] = {}
+        if not hasattr(self, "_lock_dependency_graph"):
+            self._lock_dependency_graph: Dict[str, Set[str]] = {}
+
         if self._owner_id not in self._lock_order:
             self._lock_order[self._owner_id] = []
-        self._lock_order[self._owner_id].append(lock_key)
+
+        owner_locks = self._lock_order[self._owner_id]
+
+        # For each lock the owner already holds, record a dependency to the
+        # newly acquired lock. This is used by `_would_cause_deadlock` to
+        # detect potential cycles for future acquisitions.
+        for prev_lock_key in owner_locks:
+            if prev_lock_key not in self._lock_dependency_graph:
+                self._lock_dependency_graph[prev_lock_key] = set()
+            self._lock_dependency_graph[prev_lock_key].add(lock_key)
+
+        owner_locks.append(lock_key)
     
     def _clear_lock_order(self, lock_key: str) -> None:
-        """Clear lock from acquisition order."""
+        """Clear lock from acquisition order and dependency graph."""
+        # If these structures do not exist yet, there is nothing to clear.
+        if not hasattr(self, "_lock_order"):
+            return
+
         if self._owner_id in self._lock_order:
             try:
                 self._lock_order[self._owner_id].remove(lock_key)
             except ValueError:
+                # Lock key not recorded for this owner; ignore.
                 pass
+
+        # Also clean up the dependency graph to avoid unbounded growth.
+        if hasattr(self, "_lock_dependency_graph"):
+            # Remove all outgoing edges from this lock.
+            self._lock_dependency_graph.pop(lock_key, None)
+            # Remove this lock as a target from other nodes.
+            for from_key, to_set in list(self._lock_dependency_graph.items()):
+                if lock_key in to_set:
+                    to_set.discard(lock_key)
+                    if not to_set:
+                        # Remove empty adjacency lists to keep the graph small.
+                        self._lock_dependency_graph.pop(from_key, None)
 
 
 class LockAcquisitionError(Exception):
@@ -411,10 +487,14 @@ class IdempotencyEngine:
     def __init__(
         self,
         redis_client: Optional[Any] = None,
-        default_ttl_seconds: int = 86400
+        default_ttl_seconds: int = 86400,
+        stale_operation_timeout_seconds: int = 600
     ):
         self.redis = redis_client
         self.default_ttl = default_ttl_seconds
+        # Timeout after which a "processing" operation is considered stale
+        # and can be retried. Default 10 minutes (600s) for long-running trades.
+        self.stale_timeout = stale_operation_timeout_seconds
         
         # In-memory fallback
         self._records: Dict[str, IdempotencyRecord] = {}
@@ -476,8 +556,11 @@ class IdempotencyEngine:
                 return False, existing
             elif existing.status == "processing":
                 # Check if stale (processing for too long)
-                if time.time() - existing.created_at > 300:  # 5 min timeout
+                if time.time() - existing.created_at > self.stale_timeout:
                     # Stale, allow retry
+                    logger.warning(
+                        f"Operation {idempotency_key} stale after {self.stale_timeout}s, allowing retry"
+                    )
                     pass
                 else:
                     # Still processing

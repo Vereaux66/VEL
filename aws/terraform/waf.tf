@@ -214,7 +214,7 @@ resource "aws_wafv2_web_acl" "vel_api" {
     priority = 8
 
     override_action {
-      count {}  # Count mode initially, switch to none for enforcement
+      none {}  # Enforcement mode for bot protection
     }
 
     statement {

@@ -38,9 +38,10 @@ resource "aws_secretsmanager_secret_version" "vel_app_secrets" {
     REDIS_PORT = "6379"
   })
 
-  lifecycle {
-    ignore_changes = [secret_string]
-  }
+  # Note: We do NOT use ignore_changes here so that Terraform can update
+  # the secret when infrastructure changes (e.g., RDS endpoint changes).
+  # For production, consider using AWS Secrets Manager's native RDS integration
+  # which automatically handles credential rotation.
 }
 
 # Separate secret for exchange API keys (manually populated)
@@ -160,17 +161,10 @@ resource "aws_iam_role_policy" "vel_secrets_access" {
   })
 }
 
-# Secrets rotation configuration (optional)
-resource "aws_secretsmanager_secret_rotation" "vel_app_secrets" {
-  count = var.vel_enable_secrets_rotation ? 1 : 0
-
-  secret_id           = aws_secretsmanager_secret.vel_app_secrets.id
-  rotation_lambda_arn = aws_lambda_function.vel_secret_rotation[0].arn
-
-  rotation_rules {
-    automatically_after_days = 90
-  }
-}
+# NOTE: Secrets rotation is currently disabled because the rotation Lambda
+# function (aws_lambda_function.vel_secret_rotation) has not been implemented yet.
+# When the Lambda is available, reintroduce an aws_secretsmanager_secret_rotation
+# resource here that references the implemented function.
 
 # Data source for current AWS account
 data "aws_caller_identity" "current" {}

@@ -14,12 +14,17 @@ Usage:
 import argparse
 import hashlib
 import json
+import logging
 import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 import uuid
+
+# Setup logging
+logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+logger = logging.getLogger(__name__)
 
 
 def get_installed_packages() -> List[Dict[str, Any]]:
@@ -53,6 +58,7 @@ def get_package_info(package_name: str) -> Optional[Dict[str, Any]]:
         text=True
     )
     if result.returncode != 0:
+        logger.warning(f"Failed to get info for package {package_name}: {result.stderr.strip()}")
         return None
     
     info = {}

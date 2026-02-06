@@ -540,10 +540,23 @@ class CrashRecoveryManager:
         return result
     
     def _restore_checkpoint_state(self, checkpoint: Checkpoint) -> None:
-        """Restore state from checkpoint."""
-        # This would be implemented by the application
-        # to restore internal state from the snapshot
+        """
+        Restore state from checkpoint.
+        
+        NOTE: This method must be implemented by the application to restore
+        internal state from the snapshot stored in the checkpoint. Override
+        this method in a subclass or set a custom handler via register_handler().
+        
+        The default implementation only logs, as the actual state restoration
+        depends on application-specific data structures.
+        """
         logger.debug(f"Restoring state from checkpoint {checkpoint.checkpoint_id}")
+        logger.info(f"Checkpoint state keys: {list(checkpoint.state_snapshot.keys()) if checkpoint.state_snapshot else []}")
+        # Application-specific implementation would restore:
+        # - Wallet balances
+        # - Nonce states
+        # - Position data
+        # - Pending transaction states
     
     def _replay_entry(self, entry: JournalEntry) -> None:
         """Replay a single journal entry."""
@@ -554,9 +567,21 @@ class CrashRecoveryManager:
             logger.debug(f"No handler for entry type {entry.entry_type}")
     
     def _verify_state(self) -> List[str]:
-        """Verify state consistency. Returns list of errors."""
+        """
+        Verify state consistency. Returns list of errors.
+        
+        NOTE: This method must be implemented by the application to verify
+        that the recovered state is consistent. Override this method in a
+        subclass or implement custom verification logic.
+        
+        The default implementation returns an empty list (no errors).
+        """
         errors = []
-        # Application-specific verification would go here
+        # Application-specific verification would check:
+        # - Wallet balance consistency
+        # - Nonce sequence validity
+        # - Position calculations
+        # - Pending transaction states
         return errors
     
     def create_checkpoint(self, state_getter: Callable[[], Dict[str, Any]]) -> Checkpoint:

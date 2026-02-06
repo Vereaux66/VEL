@@ -17,7 +17,6 @@ All routes must pass through this middleware.
 """
 
 import functools
-import hashlib
 import hmac
 import logging
 import os
@@ -25,7 +24,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional, Set
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 from flask import Flask, Request, g, jsonify, request
 
@@ -97,7 +96,7 @@ class TokenBucketRateLimiter:
         self._lock = threading.Lock()
         self._blocked: Dict[str, float] = {}
     
-    def is_allowed(self, identifier: str) -> tuple[bool, Dict[str, Any]]:
+    def is_allowed(self, identifier: str) -> Tuple[bool, Dict[str, Any]]:
         """
         Check if request is allowed for identifier.
         
@@ -201,7 +200,7 @@ class ReplayProtector:
         self._used_nonces: Dict[str, float] = {}
         self._lock = threading.Lock()
     
-    def check_and_record(self, nonce: str) -> tuple[bool, str]:
+    def check_and_record(self, nonce: str) -> Tuple[bool, str]:
         """
         Check if nonce is valid and record it.
         
@@ -264,7 +263,7 @@ class SignatureVerifier:
         method: str,
         path: str,
         body: bytes
-    ) -> tuple[bool, str]:
+    ) -> Tuple[bool, str]:
         """
         Verify request signature.
         
@@ -428,8 +427,16 @@ class SecurityMiddleware:
         signature = req.headers.get(self.config.signature_header)
         timestamp = req.headers.get(self.config.timestamp_header)
         
-        # Allow requests without signature in non-strict mode
+        # If both signature and timestamp are missing, behavior depends on config:
+        # - When signature verification is enabled (strict mode), treat this as an error.
+        # - When disabled, allow the request through without signature verification.
         if not signature and not timestamp:
+            if self.config.signature_verification_enabled:
+                logger.warning("Missing required signature and timestamp headers for strict signature verification.")
+                return jsonify({
+                    "error": "signature_missing",
+                    "message": "Missing required signature and timestamp headers."
+                }), 401
             return None
         
         valid, reason = self.signature_verifier.verify(
@@ -453,9 +460,18 @@ class SecurityMiddleware:
         """Check for replay attacks."""
         nonce = req.headers.get(self.config.nonce_header)
         
-        # Allow requests without nonce in non-strict mode
-        if not nonce:
-            return None
+        # When replay protection is disabled, allow requests without nonce
+        if not self.config.replay_protection_enabled:
+            if not nonce:
+                return None
+        else:
+            # When replay protection is enabled, require nonce for all requests
+            if not nonce:
+                logger.warning("Replay protection enabled but nonce header is missing")
+                return jsonify({
+                    "error": "nonce_required",
+                    "message": "Replay protection is enabled and a valid nonce header is required."
+                }), 400
         
         valid, reason = self.replay_protector.check_and_record(nonce)
         
@@ -526,9 +542,10 @@ def require_auth(f: Callable) -> Callable:
         
         # Validate JWT
         if auth_header and auth_header.startswith("Bearer "):
-            token = auth_header.split(" ", 1)[1]
+            _token = auth_header.split(" ", 1)[1]  # placeholder for future JWT validation
             try:
-                # JWT validation would go here
+                # TODO: Implement proper JWT validation using PyJWT
+                # Decode and verify token signature, expiration, and claims
                 # For now, just set a placeholder
                 g.user_id = "authenticated_user"
                 g.auth_method = "jwt"
@@ -541,11 +558,33 @@ def require_auth(f: Callable) -> Callable:
         
         # Validate API key
         elif api_key:
-            # API key validation would go here
-            if not api_key.startswith("vel_"):
+            # API key validation: check format and verify against configured allow-list
+            def _is_valid_api_key(key: str) -> bool:
+                """
+                Validate the API key against a configured allow-list.
+
+                Expected configuration:
+                    VEL_VALID_API_KEYS=<key1>,<key2>,...
+
+                If no valid keys are configured, no API keys are accepted.
+                """
+                if not key or not key.startswith("vel_"):
+                    return False
+
+                valid_keys_env = os.environ.get("VEL_VALID_API_KEYS", "")
+                # Build a set of non-empty, trimmed keys
+                valid_keys = {k.strip() for k in valid_keys_env.split(",") if k.strip()}
+
+                if not valid_keys:
+                    # Secure default: if no keys are configured, deny all API key access
+                    return False
+
+                return key in valid_keys
+
+            if not _is_valid_api_key(api_key):
                 return jsonify({
                     "error": "invalid_api_key",
-                    "message": "Invalid API key format"
+                    "message": "Invalid API key"
                 }), 401
             g.user_id = "api_user"
             g.auth_method = "api_key"
@@ -612,7 +651,7 @@ class KeyRotationManager:
             }
         logger.info(f"Key added: {key_id}")
     
-    def validate_key(self, key_value: str) -> tuple[bool, Optional[str]]:
+    def validate_key(self, key_value: str) -> Tuple[bool, Optional[str]]:
         """Validate a key value and return key_id if valid."""
         now = time.time()
         

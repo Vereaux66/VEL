@@ -120,7 +120,12 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install -r requirements-lock.txt || pip install -r requirements.txt
+          if [ -f requirements-lock.txt ]; then
+            pip install -r requirements-lock.txt
+          else
+            echo "Error: requirements-lock.txt is missing. Failing the build to avoid using unlocked dependencies." >&2
+            exit 1
+          fi
           pip install pytest pytest-cov pytest-asyncio
 
       - name: Run tests with coverage
@@ -452,8 +457,16 @@ jobs:
 
       - name: Run smoke tests
         run: |
-          # Wait for service to be ready
-          sleep 30
-          # Health check
-          curl -sf https://kessann.bot/health || exit 1
-          echo "Production deployment verified"
+          # Poll health endpoint until service is ready or timeout
+          MAX_RETRIES=30
+          SLEEP_SECONDS=5
+          for i in $(seq 1 $MAX_RETRIES); do
+            if curl -sf https://kessann.bot/health > /dev/null; then
+              echo "Production deployment verified"
+              exit 0
+            fi
+            echo "Health check attempt $i/$MAX_RETRIES failed; retrying in ${SLEEP_SECONDS}s..."
+            sleep "$SLEEP_SECONDS"
+          done
+          echo "Service did not become healthy after $((MAX_RETRIES * SLEEP_SECONDS)) seconds"
+          exit 1
