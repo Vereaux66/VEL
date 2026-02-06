@@ -77,7 +77,7 @@ resource "aws_db_instance" "vel_primary" {
   maintenance_window      = "Mon:04:00-Mon:05:00"
   copy_tags_to_snapshot   = true
   skip_final_snapshot     = var.vel_env_name != "production"
-  final_snapshot_identifier = var.vel_env_name == "production" ? "vel-final-snapshot-${formatdate("YYYY-MM-DD", timestamp())}" : null
+  final_snapshot_identifier = var.vel_env_name == "production" ? "vel-final-${var.vel_env_name}-${random_id.snapshot_suffix.hex}" : null
 
   # Performance Insights
   performance_insights_enabled          = true
@@ -102,6 +102,11 @@ resource "aws_db_instance" "vel_primary" {
     Component   = "VEL-Database"
     Environment = var.vel_env_name
   }
+}
+
+# Random ID for unique snapshot names
+resource "random_id" "snapshot_suffix" {
+  byte_length = 4
 }
 
 # KMS key for RDS encryption

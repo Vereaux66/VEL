@@ -274,8 +274,19 @@ class TestCrashRecovery(unittest.TestCase):
 class TestSecurityMiddleware(unittest.TestCase):
     """Test security middleware."""
     
+    @classmethod
+    def setUpClass(cls):
+        """Check if Flask is available."""
+        try:
+            import flask
+            cls.flask_available = True
+        except ImportError:
+            cls.flask_available = False
+    
     def test_rate_limiter_allows_normal_traffic(self):
         """Rate limiter should allow normal traffic."""
+        if not self.flask_available:
+            self.skipTest("Flask not installed")
         from vel_security_middleware import TokenBucketRateLimiter
         
         limiter = TokenBucketRateLimiter(requests_per_minute=60, burst_size=10)
@@ -287,6 +298,8 @@ class TestSecurityMiddleware(unittest.TestCase):
     
     def test_rate_limiter_blocks_excessive_traffic(self):
         """Rate limiter should block excessive traffic."""
+        if not self.flask_available:
+            self.skipTest("Flask not installed")
         from vel_security_middleware import TokenBucketRateLimiter
         
         limiter = TokenBucketRateLimiter(requests_per_minute=60, burst_size=5)
@@ -301,6 +314,8 @@ class TestSecurityMiddleware(unittest.TestCase):
     
     def test_replay_protector(self):
         """Replay protector should detect duplicate nonces."""
+        if not self.flask_available:
+            self.skipTest("Flask not installed")
         from vel_security_middleware import ReplayProtector
         
         protector = ReplayProtector(ttl_seconds=60)
@@ -317,6 +332,8 @@ class TestSecurityMiddleware(unittest.TestCase):
     
     def test_signature_verifier(self):
         """Signature verifier should validate signatures correctly."""
+        if not self.flask_available:
+            self.skipTest("Flask not installed")
         from vel_security_middleware import SignatureVerifier
         import hmac
         import hashlib
@@ -344,6 +361,8 @@ class TestSecurityMiddleware(unittest.TestCase):
     
     def test_key_rotation_manager(self):
         """Key rotation manager should rotate keys correctly."""
+        if not self.flask_available:
+            self.skipTest("Flask not installed")
         from vel_security_middleware import KeyRotationManager
         
         manager = KeyRotationManager(overlap_seconds=60)
@@ -391,8 +410,19 @@ class TestTransactionQueueLock(unittest.TestCase):
 class TestStateLedgerIntegration(unittest.TestCase):
     """Integration tests for state ledger."""
     
+    @classmethod
+    def setUpClass(cls):
+        """Check if web3 is available."""
+        try:
+            import web3
+            cls.web3_available = True
+        except ImportError:
+            cls.web3_available = False
+    
     def test_ledger_persistence(self):
         """State ledger should persist data correctly."""
+        if not self.web3_available:
+            self.skipTest("web3 not installed")
         from vel_state_ledger import StateLedger
         
         with tempfile.TemporaryDirectory() as tmpdir:

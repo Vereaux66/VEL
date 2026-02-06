@@ -16,6 +16,9 @@ resource "aws_secretsmanager_secret" "vel_app_secrets" {
 }
 
 # Secret version with initial values
+# NOTE: For production, consider using AWS Secrets Manager's native RDS integration
+# (rotation lambda) instead of storing DB_HOST directly. This version is simplified
+# for initial deployment. See: https://docs.aws.amazon.com/secretsmanager/latest/userguide/integrating_how-services-use-secrets_RDS.html
 resource "aws_secretsmanager_secret_version" "vel_app_secrets" {
   secret_id = aws_secretsmanager_secret.vel_app_secrets.id
   secret_string = jsonencode({

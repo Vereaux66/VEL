@@ -331,8 +331,16 @@ class SecurityMiddleware:
             ttl_seconds=self.config.nonce_ttl_seconds
         )
         
-        # Signature verifier (secret from env)
-        api_secret = os.getenv("VEL_API_SECRET", "default-dev-secret-change-me")
+        # Signature verifier (secret from env - REQUIRED in production)
+        api_secret = os.getenv("VEL_API_SECRET")
+        if api_secret is None:
+            if os.getenv("VEL_ENV", "development") == "production":
+                raise ValueError(
+                    "VEL_API_SECRET environment variable is required in production"
+                )
+            api_secret = "dev-only-insecure-secret-not-for-production"
+            logger.warning("VEL_API_SECRET not set - using insecure default (DEV ONLY)")
+        
         self.signature_verifier = SignatureVerifier(
             secret_key=api_secret,
             max_age_seconds=self.config.signature_max_age_seconds

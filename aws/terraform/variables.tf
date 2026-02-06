@@ -144,3 +144,9 @@ variable "vel_waf_blocklisted_ips" {
   type        = list(string)
   default     = []
 }
+
+variable "vel_waf_block_suspicious_ua" {
+  description = "Enable blocking of suspicious user agents (use with caution)"
+  type        = bool
+  default     = false
+}

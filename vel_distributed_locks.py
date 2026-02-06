@@ -336,10 +336,20 @@ class DistributedLockManager:
             self.release(lock_info)
     
     def _would_cause_deadlock(self, new_lock_key: str) -> bool:
-        """Check if acquiring this lock would cause a deadlock."""
-        # Simple deadlock detection: check if we're trying to acquire
-        # a lock held by someone waiting for our locks
-        # This is a simplified implementation
+        """
+        Check if acquiring this lock would cause a deadlock.
+        
+        TODO: Implement full deadlock detection algorithm.
+        Current implementation is a placeholder that always returns False.
+        A proper implementation would:
+        1. Build a wait-for graph of lock dependencies
+        2. Detect cycles in the graph
+        3. Return True if adding this lock would create a cycle
+        
+        For now, rely on lock timeouts to prevent infinite deadlocks.
+        """
+        # Placeholder - full implementation would require distributed
+        # coordination to track which processes are waiting for which locks
         return False
     
     def _record_lock_order(self, lock_key: str) -> None:

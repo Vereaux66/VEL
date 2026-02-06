@@ -129,54 +129,59 @@ resource "aws_wafv2_web_acl" "vel_api" {
     }
   }
 
-  # Custom rule - Block suspicious user agents
-  rule {
-    name     = "VELBlockSuspiciousUserAgents"
-    priority = 6
+  # Custom rule - Block suspicious user agents (NOTE: Whitelist legitimate clients separately)
+  # This rule is intentionally permissive by default and should be customized per deployment
+  dynamic "rule" {
+    for_each = var.vel_waf_block_suspicious_ua ? [1] : []
 
-    action {
-      block {}
-    }
+    content {
+      name     = "VELBlockSuspiciousUserAgents"
+      priority = 6
 
-    statement {
-      or_statement {
-        statement {
-          byte_match_statement {
-            field_to_match {
-              single_header {
-                name = "user-agent"
+      action {
+        count {}  # Count mode by default - switch to block after testing
+      }
+
+      statement {
+        or_statement {
+          statement {
+            byte_match_statement {
+              field_to_match {
+                single_header {
+                  name = "user-agent"
+                }
               }
-            }
-            positional_constraint = "CONTAINS"
-            search_string         = "curl/"
-            text_transformation {
-              priority = 0
-              type     = "LOWERCASE"
+              positional_constraint = "EXACTLY"
+              search_string         = ""  # Empty user-agent
+              text_transformation {
+                priority = 0
+                type     = "LOWERCASE"
+              }
             }
           }
-        }
-        statement {
-          byte_match_statement {
-            field_to_match {
-              single_header {
-                name = "user-agent"
+          statement {
+            byte_match_statement {
+              field_to_match {
+                single_header {
+                  name = "user-agent"
+                }
               }
-            }
-            positional_constraint = "CONTAINS"
-            search_string         = "python-requests"
-            text_transformation {
-              priority = 0
-              type     = "LOWERCASE"
+              positional_constraint = "CONTAINS"
+              search_string         = "sqlmap"
+              text_transformation {
+                priority = 0
+                type     = "LOWERCASE"
+              }
             }
           }
         }
       }
-    }
 
-    visibility_config {
-      cloudwatch_metrics_enabled = true
-      metric_name                = "VELSuspiciousUA"
-      sampled_requests_enabled   = true
+      visibility_config {
+        cloudwatch_metrics_enabled = true
+        metric_name                = "VELSuspiciousUA"
+        sampled_requests_enabled   = true
+      }
     }
   }
 
