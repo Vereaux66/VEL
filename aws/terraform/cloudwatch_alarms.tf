@@ -208,13 +208,14 @@ resource "aws_cloudwatch_metric_alarm" "vel_rds_read_latency_high" {
 
 # =============================================================================
 # Redis/ElastiCache Alarms
+# Note: Using ReplicationGroupId for aggregate metrics across all nodes
 # =============================================================================
 
 resource "aws_cloudwatch_metric_alarm" "vel_redis_cpu_high" {
   alarm_name          = "vel-redis-cpu-high-${var.vel_env_name}"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 3
-  metric_name         = "CPUUtilization"
+  metric_name         = "EngineCPUUtilization"
   namespace           = "AWS/ElastiCache"
   period              = 300
   statistic           = "Average"
@@ -224,7 +225,7 @@ resource "aws_cloudwatch_metric_alarm" "vel_redis_cpu_high" {
   ok_actions          = [aws_sns_topic.vel_alerts.arn]
 
   dimensions = {
-    CacheClusterId = "${aws_elasticache_replication_group.vel_redis.id}-001"
+    ReplicationGroupId = aws_elasticache_replication_group.vel_redis.id
   }
 
   tags = {
@@ -248,7 +249,7 @@ resource "aws_cloudwatch_metric_alarm" "vel_redis_memory_high" {
   ok_actions          = [aws_sns_topic.vel_alerts.arn]
 
   dimensions = {
-    CacheClusterId = "${aws_elasticache_replication_group.vel_redis.id}-001"
+    ReplicationGroupId = aws_elasticache_replication_group.vel_redis.id
   }
 
   tags = {
@@ -271,7 +272,7 @@ resource "aws_cloudwatch_metric_alarm" "vel_redis_evictions" {
   alarm_actions       = [aws_sns_topic.vel_alerts.arn]
 
   dimensions = {
-    CacheClusterId = "${aws_elasticache_replication_group.vel_redis.id}-001"
+    ReplicationGroupId = aws_elasticache_replication_group.vel_redis.id
   }
 
   tags = {
@@ -580,7 +581,7 @@ resource "aws_cloudwatch_dashboard" "vel_main" {
           title  = "Redis Memory"
           region = var.vel_aws_region
           metrics = [
-            ["AWS/ElastiCache", "DatabaseMemoryUsagePercentage", "CacheClusterId", "${aws_elasticache_replication_group.vel_redis.id}-001"]
+            ["AWS/ElastiCache", "DatabaseMemoryUsagePercentage", "ReplicationGroupId", aws_elasticache_replication_group.vel_redis.id]
           ]
         }
       },

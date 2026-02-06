@@ -385,7 +385,7 @@ def check_database_health() -> ComponentHealth:
     """Check database connectivity."""
     try:
         import os
-        db_host = os.environ.get("ANVEL_DB_HOST", "localhost")
+        db_host = os.environ.get("VEL_DB_HOST", "localhost")
         # In a real implementation, attempt a database ping
         return ComponentHealth(
             name="database",
@@ -404,7 +404,7 @@ def check_redis_health() -> ComponentHealth:
     """Check Redis connectivity."""
     try:
         import os
-        redis_url = os.environ.get("ANVEL_REDIS_URL", "redis://localhost:6379")
+        redis_url = os.environ.get("VEL_REDIS_URL", "redis://localhost:6379")
         # In a real implementation, attempt a Redis PING
         return ComponentHealth(
             name="redis",

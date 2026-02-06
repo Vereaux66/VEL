@@ -141,9 +141,12 @@ resource "aws_kms_alias" "vel_redis" {
 }
 
 # Random password for Redis AUTH
+# Note: ElastiCache AUTH tokens support alphanumeric and some special characters
+# but have restrictions on !@#$%^&*()_+ - using only allowed characters
 resource "random_password" "vel_redis_auth" {
   length           = 32
-  special          = false  # ElastiCache AUTH tokens have restrictions
+  special          = true
+  override_special = "!&#$^<>-"  # Characters allowed by ElastiCache
 }
 
 # CloudWatch log group for Redis logs

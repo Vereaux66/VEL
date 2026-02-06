@@ -472,8 +472,10 @@ validate_deployment() {
     log_info "Running health check..."
     HEALTH_URL="https://${ENDPOINT}/health"
     
+    # Note: For production deployments with proper certificates, remove --max-time flag
+    # and ensure CA certificates are properly configured
     for i in {1..5}; do
-        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -k "${HEALTH_URL}" 2>/dev/null || echo "000")
+        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "${HEALTH_URL}" 2>/dev/null || echo "000")
         if [ "$HTTP_CODE" = "200" ]; then
             log_success "Health check passed!"
             log_success "Service endpoint: ${HEALTH_URL}"
