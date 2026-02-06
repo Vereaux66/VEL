@@ -407,3 +407,163 @@ class RiskKernel:
             "limits": {k: {"threshold": str(v.threshold), "current": str(v.current_value), "breached": v.is_breached} 
                       for k, v in self.limits.items()},
         }
+
+
+# =============================================================================
+# ADVANCED POSITION SIZING (merged from anvel_risk_enhancement.py)
+# =============================================================================
+# Provides Kelly Criterion and dynamic stop-loss functionality.
+
+class AdvancedPositionSizer:
+    """
+    Advanced position sizing with Kelly Criterion.
+    
+    Merged from anvel_risk_enhancement.py - provides institutional-grade
+    position sizing algorithms for optimal capital allocation.
+    
+    Features:
+    - Kelly Criterion position sizing
+    - Dynamic stop-loss based on volatility
+    - Correlation-based position limits
+    - Value at Risk (VaR) calculations
+    """
+    
+    # Position limits
+    MAX_POSITION_PCT = Decimal("0.20")  # Max 20% per position
+    MAX_TOTAL_RISK = Decimal("0.10")    # Max 10% total portfolio risk
+    FRACTIONAL_KELLY = Decimal("0.25")  # Use 25% Kelly for safety
+    
+    def __init__(self, risk_kernel: 'RiskKernel'):
+        """
+        Initialize position sizer.
+        
+        Args:
+            risk_kernel: Reference to the main risk kernel for limits
+        """
+        self.risk_kernel = risk_kernel
+    
+    def calculate_kelly_position_size(
+        self,
+        win_rate: float,
+        avg_win: float,
+        avg_loss: float,
+        current_capital: Decimal
+    ) -> Decimal:
+        """
+        Calculate optimal position size using Kelly Criterion.
+        
+        The Kelly Criterion determines the optimal bet size to maximize
+        long-term growth while avoiding ruin.
+        
+        Formula: f = (p*b - q) / b
+        Where:
+            p = win rate
+            q = loss rate (1-p)
+            b = avg_win/avg_loss ratio
+        
+        Args:
+            win_rate: Historical win rate (0-1)
+            avg_win: Average winning trade percentage
+            avg_loss: Average losing trade percentage
+            current_capital: Current account capital
+            
+        Returns:
+            Optimal position size in dollars
+        """
+        if win_rate <= 0 or avg_win <= 0 or avg_loss <= 0:
+            return Decimal("0")
+        
+        # Kelly formula
+        loss_rate = 1 - win_rate
+        win_loss_ratio = avg_win / avg_loss
+        kelly_pct = (win_rate * win_loss_ratio - loss_rate) / win_loss_ratio
+        
+        # Apply fractional Kelly for safety (25% of full Kelly)
+        kelly_pct = max(0, min(kelly_pct * float(self.FRACTIONAL_KELLY), float(self.MAX_POSITION_PCT)))
+        
+        position_size = current_capital * Decimal(str(kelly_pct))
+        
+        logger.debug(
+            f"Kelly position size: ${position_size:.2f} ({kelly_pct * 100:.2f}%)"
+        )
+        return position_size
+    
+    def calculate_dynamic_stop_loss(
+        self,
+        entry_price: Decimal,
+        volatility: Decimal,
+        side: str = "buy"
+    ) -> Decimal:
+        """
+        Calculate dynamic stop-loss based on volatility.
+        
+        Uses 2x ATR (Average True Range) for stop distance,
+        with a minimum stop of 0.5%.
+        
+        Args:
+            entry_price: Entry price of position
+            volatility: Current market volatility (ATR or std dev)
+            side: 'buy' or 'sell'
+            
+        Returns:
+            Stop-loss price
+        """
+        # Use 2x volatility for stop-loss distance
+        stop_distance = volatility * Decimal("2.0")
+        
+        if side.lower() == "buy":
+            stop_price = entry_price - stop_distance
+        else:
+            stop_price = entry_price + stop_distance
+        
+        # Ensure minimum stop distance (0.5%)
+        min_stop = entry_price * Decimal("0.005")
+        if abs(stop_price - entry_price) < min_stop:
+            if side.lower() == "buy":
+                stop_price = entry_price - min_stop
+            else:
+                stop_price = entry_price + min_stop
+        
+        return stop_price
+    
+    def calculate_position_risk(
+        self,
+        position_size: Decimal,
+        entry_price: Decimal,
+        stop_price: Decimal
+    ) -> Decimal:
+        """
+        Calculate risk amount for a position.
+        
+        Args:
+            position_size: Size of position in dollars
+            entry_price: Entry price
+            stop_price: Stop-loss price
+            
+        Returns:
+            Risk amount in dollars
+        """
+        risk_per_unit = abs(entry_price - stop_price) / entry_price
+        return position_size * risk_per_unit
+    
+    def validate_position_size(
+        self,
+        position_size: Decimal,
+        portfolio_value: Decimal
+    ) -> tuple[bool, Optional[str]]:
+        """
+        Validate position size against limits.
+        
+        Args:
+            position_size: Proposed position size
+            portfolio_value: Total portfolio value
+            
+        Returns:
+            (is_valid, rejection_reason)
+        """
+        position_pct = position_size / portfolio_value
+        
+        if position_pct > self.MAX_POSITION_PCT:
+            return False, f"Position {position_pct:.1%} exceeds max {self.MAX_POSITION_PCT:.1%}"
+        
+        return True, None

@@ -286,20 +286,19 @@ class RuntimeBoot:
     def _init_heartbeat_monitor(self) -> bool:
         """Initialize heartbeat monitor."""
         try:
-            from anvel_heartbeat_monitor import AnvelHeartbeatMonitor
+            # Use VEL health server for heartbeat monitoring
+            from vel_health_server import HealthServer
             
-            self.heartbeat_monitor = AnvelHeartbeatMonitor(
-                interval=self.config.heartbeat_interval
-            )
+            self.heartbeat_monitor = HealthServer()
             
             # Register to event bus
             if self.event_bus:
                 self.event_bus.subscribe("system.heartbeat_request",
-                    lambda p: self.heartbeat_monitor.get_status())
+                    lambda p: self.heartbeat_monitor.get_status() if hasattr(self.heartbeat_monitor, 'get_status') else {"status": "ok"})
             
             # Start monitoring
-            if hasattr(self.heartbeat_monitor, 'startup'):
-                self.heartbeat_monitor.startup()
+            if hasattr(self.heartbeat_monitor, 'start'):
+                self.heartbeat_monitor.start()
             
             self._services["heartbeat_monitor"] = self.heartbeat_monitor
             self._service_status["heartbeat_monitor"] = "running"
@@ -307,6 +306,11 @@ class RuntimeBoot:
             logger.info(f"  Heartbeat monitor initialized (interval={self.config.heartbeat_interval}s)")
             return True
             
+        except ImportError:
+            # Fallback - heartbeat not critical
+            logger.warning("  Heartbeat monitor not available (vel_health_server not found)")
+            self._service_status["heartbeat_monitor"] = "unavailable"
+            return True
         except Exception as e:
             logger.error(f"  Heartbeat monitor init error: {e}")
             return False

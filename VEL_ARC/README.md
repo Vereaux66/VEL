@@ -17,8 +17,8 @@ The VEL_ARC directory preserves legacy code for:
 VEL_ARC/
 ├── README.md                    # This file
 ├── cex_brokers/                 # Removed CEX broker modules
-│   ├── anvel_broker_coinbase.py # Archived Coinbase data feed adapter
-│   └── anvel_broker_kraken.py   # Archived Kraken data feed adapter
+│   ├── anvel_broker_coinbase.py
+│   └── anvel_broker_kraken.py
 ├── anvel_ai_legacy/             # Consolidated AI modules
 │   ├── anvel_advanced_ai_core.py
 │   ├── anvel_autonomous_core.py
@@ -27,8 +27,23 @@ VEL_ARC/
 │   ├── anvel_evolving_code_repair.py
 │   ├── anvel_import_repairer.py
 │   └── anvel_predictive_healing.py
-├── legacy_entry_points/         # Deprecated entry points (reserved)
-└── deprecated_anvel_modules/    # Other deprecated ANVEL modules (reserved)
+├── out_of_scope/                # Modules outside DEX-only scope
+│   ├── anvel_btcpay_integration.py
+│   ├── anvel_crypto_payment_integration.py
+│   ├── anvel_monero_privacy.py
+│   ├── anvel_social_signal.py
+│   ├── anvel_startup_wizard.py
+│   ├── anvel_runtime_wizard.py
+│   ├── anvel_saas_integration_example.py
+│   ├── anvel_operational_ledger.py
+│   └── btcpay_scanner.py
+├── overlapping_merged/          # Functionality merged into VEL modules
+│   ├── anvel_circuit_breaker.py  → merged into vel_circuit_breaker.py
+│   ├── anvel_risk_enhancement.py → merged into vel_risk_kernel.py
+│   ├── anvel_heartbeat_monitor.py → replaced by vel_health_server.py
+│   └── anvel_logging.py          → replaced by vel_structured_logging.py
+├── legacy_entry_points/         # Reserved for future archival
+└── deprecated_anvel_modules/    # Reserved for future archival
 ```
 
 ## CEX Brokers Archive

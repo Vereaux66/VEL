@@ -329,14 +329,10 @@ class CircuitBreakerController:
             # Try to import and instantiate circuit breaker
             breaker = None
             try:
-                from anvel_circuit_breaker import CircuitBreaker
-                breaker = CircuitBreaker()
+                from vel_circuit_breaker import CircuitBreakerManager
+                breaker = CircuitBreakerManager()
             except (ImportError, TypeError):
-                try:
-                    from vel_circuit_breaker import CircuitBreakerManager
-                    breaker = CircuitBreakerManager()
-                except (ImportError, TypeError):
-                    pass
+                pass
             
             if breaker is None:
                 return False, "No circuit breaker module available"
