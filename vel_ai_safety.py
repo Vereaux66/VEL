@@ -37,7 +37,7 @@ import random
 import threading
 import time
 from dataclasses import dataclass, field, asdict
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from decimal import Decimal
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Set
@@ -246,12 +246,12 @@ class SafeAIExecutor:
     def _get_next_hour(self) -> datetime:
         """Get next hour boundary."""
         now = datetime.now(timezone.utc)
-        return now.replace(minute=0, second=0, microsecond=0)
+        return now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
     
     def _get_next_day(self) -> datetime:
         """Get next day boundary."""
         now = datetime.now(timezone.utc)
-        return now.replace(hour=0, minute=0, second=0, microsecond=0)
+        return now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
     
     def _check_limits(self):
         """Check and reset hourly/daily limits."""

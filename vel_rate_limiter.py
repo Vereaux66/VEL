@@ -376,7 +376,7 @@ class RateLimitMiddleware:
     ) -> Tuple[int, int]:
         """Get rate limits for endpoint."""
         # Check for specific endpoints
-        if "login" in path or endpoint and "login" in endpoint:
+        if "login" in path or (endpoint and "login" in endpoint):
             return self.config.login_limit, 60
         
         if "trade" in path or "execute" in path:

@@ -244,8 +244,10 @@ class TraceContext:
         return self
     
     def __exit__(self, exc_type, exc_val, exc_tb):
-        trace_id_var.reset(self._trace_token)
-        span_id_var.reset(self._span_token)
+        if self._trace_token is not None:
+            trace_id_var.reset(self._trace_token)
+        if self._span_token is not None:
+            span_id_var.reset(self._span_token)
         return False
 
 
@@ -261,19 +263,24 @@ class RequestContext:
         self.request_id = request_id or str(uuid.uuid4())
         self.user_id = user_id
         self.trace_id = trace_id or str(uuid.uuid4())
-        self._tokens = []
+        self._request_token = None
+        self._trace_token = None
+        self._user_token = None
     
     def __enter__(self):
-        self._tokens.append(request_id_var.set(self.request_id))
-        self._tokens.append(trace_id_var.set(self.trace_id))
+        self._request_token = request_id_var.set(self.request_id)
+        self._trace_token = trace_id_var.set(self.trace_id)
         if self.user_id:
-            self._tokens.append(user_id_var.set(self.user_id))
+            self._user_token = user_id_var.set(self.user_id)
         return self
     
     def __exit__(self, exc_type, exc_val, exc_tb):
-        for token in reversed(self._tokens):
-            if hasattr(token, 'var'):
-                token.var.reset(token)
+        if self._request_token is not None:
+            request_id_var.reset(self._request_token)
+        if self._trace_token is not None:
+            trace_id_var.reset(self._trace_token)
+        if self._user_token is not None:
+            user_id_var.reset(self._user_token)
         return False
 
 
