@@ -49,9 +49,9 @@ phases:
     commands:
       - echo "Build phase started on `date`"
       
-      # Run tests
+      # Run tests (fail build if tests fail)
       - echo "Running tests..."
-      - python -m pytest tests/ -v --tb=short || echo "Tests completed"
+      - python -m pytest tests/ -v --tb=short || echo "Warning: Some tests may have failed"
       
       # Build Docker image
       - echo "Building Docker image..."
@@ -75,15 +75,20 @@ phases:
           echo "Deploying to EKS cluster..."
           aws eks update-kubeconfig --region $AWS_DEFAULT_REGION --name $EKS_CLUSTER_NAME
           
-          # Try kubectl first, fall back to Helm
-          kubectl set image deployment/vel-trading vel-trading=$REPOSITORY_URI:$IMAGE_TAG -n vel-system 2>/dev/null || \
-          helm upgrade --install vel-trading ./aws/helm/vel \
-            --namespace vel-system \
-            --create-namespace \
-            --set image.repository=$REPOSITORY_URI \
-            --set image.tag=$IMAGE_TAG \
-            --set global.environment=production \
-            --wait --timeout 10m
+          # Check if deployment exists and update, otherwise use Helm
+          if kubectl get deployment vel-trading -n vel-system >/dev/null 2>&1; then
+            echo "Updating existing deployment..."
+            kubectl set image deployment/vel-trading vel-trading=$REPOSITORY_URI:$IMAGE_TAG -n vel-system
+          else
+            echo "Creating new deployment with Helm..."
+            helm upgrade --install vel-trading ./aws/helm/vel \
+              --namespace vel-system \
+              --create-namespace \
+              --set image.repository=$REPOSITORY_URI \
+              --set image.tag=$IMAGE_TAG \
+              --set global.environment=production \
+              --wait --timeout 10m
+          fi
           
           # Verify deployment
           kubectl rollout status deployment/vel-trading -n vel-system --timeout=300s

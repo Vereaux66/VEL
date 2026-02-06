@@ -509,8 +509,12 @@ class ANVELWebServer:
         # =================================================================
         # CATEGORY 1: GREETINGS & BASIC INTERACTION (100+ variations)
         # =================================================================
-        if matches_any(["hello", "hi ", "hey", "greetings", "good morning", "good afternoon", 
-                       "good evening", "howdy", "sup", "what's up", "yo ", "hiya", "heya"]):
+        greeting_words = ["hello", "hey", "greetings", "good morning", "good afternoon", 
+                        "good evening", "howdy", "sup", "what's up", "hiya", "heya"]
+        # Check for "hi" as whole word or at start
+        is_hi_greeting = question_lower == "hi" or question_lower.startswith("hi ") or question_lower.startswith("hi!")
+        
+        if is_hi_greeting or matches_any(greeting_words):
             return """Hello! 👋 Welcome to VEL!
 
 I'm your AI Trading Assistant, here to help you succeed with automated cryptocurrency trading.

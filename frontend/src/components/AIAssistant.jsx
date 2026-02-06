@@ -1,22 +1,24 @@
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Send, Bot, Loader2, Sparkles, HelpCircle, TrendingUp, Shield, Wallet, Settings, Zap } from 'lucide-react'
+import { X, Send, Bot, Loader2, Zap } from 'lucide-react'
+import { Sparkles, HelpCircle, TrendingUp, Shield, Wallet, Settings } from 'lucide-react'
 import { aiApi } from '../utils/api'
+
+// Configuration constants
+const HOLOGRAM_DISPLAY_DURATION = 5000 // ms to show hologram bubble
+const SCAN_LINE_COUNT = 20 // Number of scan lines for hologram effect
 
 // Hologram effect component
 function HologramEffect() {
   return (
     <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-2xl">
-      {/* Scan lines */}
-      <div className="absolute inset-0 opacity-10">
-        {[...Array(50)].map((_, i) => (
-          <div
-            key={i}
-            className="h-px bg-plasma-cyan"
-            style={{ marginTop: `${i * 8}px` }}
-          />
-        ))}
-      </div>
+      {/* Scan lines - using CSS gradient for performance */}
+      <div 
+        className="absolute inset-0 opacity-10"
+        style={{
+          background: 'repeating-linear-gradient(0deg, transparent, transparent 7px, rgba(0, 255, 255, 0.3) 8px)'
+        }}
+      />
       {/* Glitch effect overlay */}
       <div className="absolute inset-0 bg-gradient-to-b from-plasma-cyan/5 via-transparent to-plasma-purple/5 animate-pulse" />
       {/* Corner accents */}
@@ -45,17 +47,14 @@ function HologramChatBubble({ lastMessage, isVisible }) {
         
         {/* Main hologram bubble */}
         <div className="relative bg-void/90 backdrop-blur-md border border-plasma-cyan/40 rounded-xl p-4 shadow-[0_0_30px_rgba(0,255,255,0.3)]">
-          {/* Hologram scan lines */}
+          {/* Hologram scan lines - using CSS for performance */}
           <div className="absolute inset-0 overflow-hidden rounded-xl pointer-events-none">
-            <div className="absolute inset-0 opacity-20">
-              {[...Array(20)].map((_, i) => (
-                <div
-                  key={i}
-                  className="h-px bg-gradient-to-r from-transparent via-plasma-cyan to-transparent"
-                  style={{ marginTop: `${i * 6}px` }}
-                />
-              ))}
-            </div>
+            <div 
+              className="absolute inset-0 opacity-20"
+              style={{
+                background: 'repeating-linear-gradient(0deg, transparent, transparent 5px, rgba(0, 255, 255, 0.2) 6px)'
+              }}
+            />
           </div>
           
           {/* Content */}
@@ -107,7 +106,7 @@ What would you like to know?`
     const lastMsg = messages[messages.length - 1]
     if (lastMsg?.role === 'assistant' && messages.length > 1) {
       setShowHologramBubble(true)
-      const timer = setTimeout(() => setShowHologramBubble(false), 5000)
+      const timer = setTimeout(() => setShowHologramBubble(false), HOLOGRAM_DISPLAY_DURATION)
       return () => clearTimeout(timer)
     }
   }, [messages])

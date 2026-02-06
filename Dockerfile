@@ -11,8 +11,8 @@ WORKDIR /app/frontend
 # Copy frontend package files
 COPY frontend/package*.json ./
 
-# Install dependencies
-RUN npm ci --only=production=false
+# Install dependencies (dev deps needed for build)
+RUN npm ci
 
 # Copy frontend source
 COPY frontend/ ./
@@ -63,8 +63,8 @@ RUN mkdir -p logs data backups && chown -R vel:vel logs data backups
 # Switch to non-root user
 USER vel
 
-# Expose ports
-EXPOSE 5000 3000
+# Expose port (5000 for API, frontend is built and served via API)
+EXPOSE 5000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
