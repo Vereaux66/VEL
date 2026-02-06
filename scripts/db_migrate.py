@@ -8,8 +8,12 @@ Handles database schema migrations for the ANVEL trading system.
 Features:
 - Version tracking via schema_version table
 - Atomic migrations with transaction support
-- Rollback capability
 - Dry-run mode for testing
+
+Limitations:
+- SQLite fallback has limited compatibility (no JSONB, GIN indexes)
+- Schema init uses simple `;` splitting which may fail on dollar-quoted functions
+- For PostgreSQL dollar-quoted functions, use direct psql import
 
 Usage:
     python scripts/db_migrate.py --check        # Check current version
@@ -37,7 +41,6 @@ logger = logging.getLogger(__name__)
 # Try to import psycopg2
 try:
     import psycopg2
-    from psycopg2.extras import RealDictCursor
     PSYCOPG2_AVAILABLE = True
 except ImportError:
     PSYCOPG2_AVAILABLE = False
@@ -52,6 +55,8 @@ except ImportError:
 
 # Migration definitions
 # Each migration is a tuple of (version, description, up_sql, down_sql)
+# NOTE: These migrations use PostgreSQL-specific features (JSONB, GIN indexes, IF NOT EXISTS).
+# SQLite fallback mode is for basic development only and will skip incompatible statements.
 MIGRATIONS: List[Tuple[int, str, str, str]] = [
     (
         1,

@@ -25,7 +25,7 @@ Use explicit imports when needed: `from ai.core import AISupervisor`
 """
 
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 _logger = logging.getLogger(__name__)
 
@@ -197,7 +197,7 @@ def _load_introspection():
 
 
 # Cache for combined lookup
-_combined_imports: Dict[str, Any] = None
+_combined_imports: Optional[Dict[str, Any]] = None
 
 
 def _get_combined_imports() -> Dict[str, Any]:
@@ -211,8 +211,10 @@ def _get_combined_imports() -> Dict[str, Any]:
     for loader in [_load_core, _load_learning, _load_self_repair, _load_introspection]:
         try:
             _combined_imports.update(loader())
-        except Exception:
-            pass  # Module unavailable
+        except ImportError:
+            pass  # Module unavailable - expected for optional dependencies
+        except Exception as exc:
+            _logger.exception("Unexpected error while loading '%s': %s", loader.__name__, exc)
     return _combined_imports
 
 

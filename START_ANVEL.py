@@ -102,16 +102,24 @@ class PreBootValidator:
         """Validate required configuration files exist."""
         config_dir = Path("config")
         required_configs = ["system.json", "trading.json", "networks.json"]
+        env = os.environ.get("ANVEL_ENVIRONMENT", "development")
         
         if config_dir.exists():
             for cfg in required_configs:
                 cfg_path = config_dir / cfg
                 if not cfg_path.exists():
-                    self.warnings.append(f"Configuration file missing: {cfg_path}")
+                    if env == "production":
+                        # In production, missing configs are errors
+                        self.errors.append(f"Required configuration file missing: {cfg_path}")
+                    else:
+                        self.warnings.append(f"Configuration file missing: {cfg_path}")
         else:
             # Check for main config
             if not Path("anvel_config.json").exists():
-                self.warnings.append("No configuration directory or anvel_config.json found")
+                if env == "production":
+                    self.errors.append("No configuration directory or anvel_config.json found")
+                else:
+                    self.warnings.append("No configuration directory or anvel_config.json found")
     
     def _validate_directories(self) -> None:
         """Validate data directories are writable."""
@@ -129,15 +137,15 @@ class PreBootValidator:
                 self.errors.append(f"Cannot write to directory {dir_path}: {e}")
     
     def _validate_db_connectivity(self) -> None:
-        """Validate database connectivity if configured."""
+        """Check database configuration (actual connectivity verified during boot phase)."""
         db_url = os.environ.get("ANVEL_DATABASE_URL", "")
         
         if db_url and not db_url.startswith("sqlite"):
-            # For non-SQLite databases, warn about connectivity check
-            self.warnings.append("Database connectivity will be verified during boot")
+            # For non-SQLite databases, actual connectivity is verified during boot
+            self.warnings.append("Non-SQLite database configured - connectivity will be verified during boot")
     
     def _validate_rpc_connectivity(self) -> None:
-        """Validate RPC endpoints are configured."""
+        """Check RPC endpoint configuration (actual connectivity verified during boot phase)."""
         trading_enabled = os.environ.get("ANVEL_TRADING_ENABLED", "false").lower() == "true"
         
         if trading_enabled:
@@ -149,7 +157,7 @@ class PreBootValidator:
             
             has_rpc = any(os.environ.get(var) for var in rpc_vars)
             if not has_rpc:
-                self.warnings.append("Trading enabled but no RPC endpoints configured")
+                self.errors.append("Trading enabled but no RPC endpoints configured")
 
 
 def show_help():
