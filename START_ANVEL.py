@@ -137,27 +137,77 @@ class PreBootValidator:
                 self.errors.append(f"Cannot write to directory {dir_path}: {e}")
     
     def _validate_db_connectivity(self) -> None:
-        """Check database configuration (actual connectivity verified during boot phase)."""
+        """Check database connectivity with actual connection test."""
         db_url = os.environ.get("ANVEL_DATABASE_URL", "")
         
-        if db_url and not db_url.startswith("sqlite"):
-            # For non-SQLite databases, actual connectivity is verified during boot
-            self.warnings.append("Non-SQLite database configured - connectivity will be verified during boot")
+        if not db_url:
+            return
+        
+        if db_url.startswith("sqlite"):
+            # For SQLite, just check the path is accessible
+            db_path = db_url.replace("sqlite:///", "")
+            db_dir = Path(db_path).parent
+            if not db_dir.exists():
+                try:
+                    db_dir.mkdir(parents=True, exist_ok=True)
+                except (PermissionError, OSError) as e:
+                    self.errors.append(f"Cannot create SQLite database directory: {e}")
+        else:
+            # For PostgreSQL/other databases, attempt actual connection with timeout
+            try:
+                import psycopg2
+                # Parse connection string or use as-is
+                conn = psycopg2.connect(db_url, connect_timeout=5)
+                conn.close()
+                logger.info("Database connectivity verified")
+            except ImportError:
+                self.warnings.append("psycopg2 not available - database connectivity will be verified during boot")
+            except Exception as e:
+                self.errors.append(f"Database connection failed: {e}")
     
     def _validate_rpc_connectivity(self) -> None:
-        """Check RPC endpoint configuration (actual connectivity verified during boot phase)."""
+        """Check RPC endpoint connectivity with actual health check."""
         trading_enabled = os.environ.get("ANVEL_TRADING_ENABLED", "false").lower() == "true"
         
-        if trading_enabled:
-            rpc_vars = [
-                "ANVEL_ETHEREUM_RPC_URL",
-                "ANVEL_ARBITRUM_RPC_URL",
-                "ANVEL_POLYGON_RPC_URL",
-            ]
-            
-            has_rpc = any(os.environ.get(var) for var in rpc_vars)
-            if not has_rpc:
-                self.errors.append("Trading enabled but no RPC endpoints configured")
+        if not trading_enabled:
+            return
+        
+        rpc_vars = [
+            ("ANVEL_ETHEREUM_RPC_URL", "Ethereum"),
+            ("ANVEL_ARBITRUM_RPC_URL", "Arbitrum"),
+            ("ANVEL_POLYGON_RPC_URL", "Polygon"),
+        ]
+        
+        configured_rpcs = [(var, name, os.environ.get(var)) for var, name, in rpc_vars if os.environ.get(var)]
+        
+        if not configured_rpcs:
+            self.errors.append("Trading enabled but no RPC endpoints configured")
+            return
+        
+        # Test connectivity to each configured RPC endpoint
+        try:
+            import requests
+            for var, name, url in configured_rpcs:
+                try:
+                    # Standard JSON-RPC health check (eth_chainId)
+                    response = requests.post(
+                        url,
+                        json={"jsonrpc": "2.0", "method": "eth_chainId", "params": [], "id": 1},
+                        timeout=5,
+                        headers={"Content-Type": "application/json"}
+                    )
+                    if response.status_code == 200:
+                        logger.info(f"{name} RPC connectivity verified")
+                    else:
+                        self.warnings.append(f"{name} RPC returned status {response.status_code}")
+                except requests.exceptions.Timeout:
+                    self.warnings.append(f"{name} RPC connection timed out (5s)")
+                except requests.exceptions.ConnectionError as e:
+                    self.errors.append(f"{name} RPC unreachable: {e}")
+                except Exception as e:
+                    self.warnings.append(f"{name} RPC check failed: {e}")
+        except ImportError:
+            self.warnings.append("requests library not available - RPC connectivity will be verified during boot")
 
 
 def show_help():
