@@ -216,14 +216,16 @@ output "vel_vpa_manifest" {
 # CloudWatch Target Tracking Policies (Alternative to K8s native)
 # =============================================================================
 
-# If managing scaling via CloudWatch directly instead of K8s HPA
+# Note: These alarms use ContainerInsights namespace which requires the
+# CloudWatch agent to be deployed in the EKS cluster. If using a different
+# monitoring solution, consider disabling these alarms.
 
 resource "aws_cloudwatch_metric_alarm" "vel_scale_up_alarm" {
   alarm_name          = "vel-scale-up-${var.vel_env_name}"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 2
-  metric_name         = "CPUUtilization"
-  namespace           = "AWS/EKS"
+  metric_name         = "node_cpu_utilization"
+  namespace           = "ContainerInsights"
   period              = 60
   statistic           = "Average"
   threshold           = var.vel_autoscaling.cpu_target_percent
@@ -244,8 +246,8 @@ resource "aws_cloudwatch_metric_alarm" "vel_scale_down_alarm" {
   alarm_name          = "vel-scale-down-${var.vel_env_name}"
   comparison_operator = "LessThanThreshold"
   evaluation_periods  = 5
-  metric_name         = "CPUUtilization"
-  namespace           = "AWS/EKS"
+  metric_name         = "node_cpu_utilization"
+  namespace           = "ContainerInsights"
   period              = 60
   statistic           = "Average"
   threshold           = var.vel_autoscaling.cpu_target_percent - 20

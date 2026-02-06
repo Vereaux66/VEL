@@ -4,8 +4,8 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/security/Pausable.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/Pausable.sol";
 
 /**
  * @title VELTradeExecutor
@@ -132,7 +132,11 @@ contract VELTradeExecutor is Ownable, ReentrancyGuard, Pausable {
         if (!approvedTokens[tokenIn] || !approvedTokens[tokenOut]) {
             revert TokenNotApproved(tokenIn);
         }
-        if (block.timestamp > deadline) revert DeadlineExpired(deadline, block.timestamp);
+        // Enforce deadline with minimum offset to prevent too-short deadlines
+        // This check subsumes the basic "deadline not expired" check
+        if (deadline < block.timestamp + minDeadlineOffset) {
+            revert InvalidDeadline(deadline);
+        }
 
         // Get balance before
         uint256 balanceBefore = IERC20(tokenOut).balanceOf(address(this));
@@ -299,10 +303,18 @@ contract VELTradeExecutor is Ownable, ReentrancyGuard, Pausable {
     function _executeSwapInternal(
         SwapParams calldata params
     ) internal returns (uint256) {
-        // Implementation similar to executeSwap but for batch processing
+        // Full validation matching executeSwap
+        if (params.router == address(0) || params.tokenIn == address(0) || params.tokenOut == address(0)) {
+            revert ZeroAddress();
+        }
+        if (params.amountIn == 0 || params.minAmountOut == 0) revert ZeroAmount();
         if (!approvedRouters[params.router]) revert RouterNotApproved(params.router);
-        if (block.timestamp > params.deadline) {
-            revert DeadlineExpired(params.deadline, block.timestamp);
+        if (!approvedTokens[params.tokenIn] || !approvedTokens[params.tokenOut]) {
+            revert TokenNotApproved(params.tokenIn);
+        }
+        // Enforce deadline with minimum offset (subsumes basic expiry check)
+        if (params.deadline < block.timestamp + minDeadlineOffset) {
+            revert InvalidDeadline(params.deadline);
         }
 
         uint256 balanceBefore = IERC20(params.tokenOut).balanceOf(address(this));
@@ -318,6 +330,10 @@ contract VELTradeExecutor is Ownable, ReentrancyGuard, Pausable {
         }
 
         IERC20(params.tokenOut).safeTransfer(msg.sender, amountOut);
+
+        // Update state for consistency with executeSwap
+        userTradingVolume[msg.sender] += params.amountIn;
+        tradeNonces[msg.sender]++;
         
         emit TradeExecuted(
             msg.sender,

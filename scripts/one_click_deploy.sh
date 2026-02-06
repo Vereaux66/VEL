@@ -7,7 +7,7 @@
 # to AWS infrastructure.
 #
 # Usage:
-#   ./scripts/deploy.sh [environment] [options]
+#   ./scripts/one_click_deploy.sh [environment] [options]
 #
 # Environments:
 #   dev         Development environment
@@ -58,7 +58,25 @@ ROLLBACK=false
 # AWS Configuration
 AWS_REGION="${AWS_REGION:-us-east-1}"
 ECR_REPO="vel-trading"
-EKS_CLUSTER="vel-prod"
+
+# Derive EKS cluster name from environment, with optional override via VEL_EKS_CLUSTER
+case "${ENVIRONMENT}" in
+    dev)
+        DEFAULT_EKS_CLUSTER="vel-dev"
+        ;;
+    staging)
+        DEFAULT_EKS_CLUSTER="vel-staging"
+        ;;
+    production)
+        DEFAULT_EKS_CLUSTER="vel-prod"
+        ;;
+    *)
+        # Fallback: use environment name directly
+        DEFAULT_EKS_CLUSTER="vel-${ENVIRONMENT}"
+        ;;
+esac
+
+EKS_CLUSTER="${VEL_EKS_CLUSTER:-${DEFAULT_EKS_CLUSTER}}"
 
 # Version info
 VERSION="${VEL_VERSION:-$(git rev-parse --short HEAD 2>/dev/null || echo 'latest')}"

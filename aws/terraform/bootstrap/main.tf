@@ -4,7 +4,7 @@
 # Usage:
 #   cd aws/terraform/bootstrap
 #   terraform init
-#   terraform apply
+#   terraform apply -var="bucket_suffix=mycompany"
 #
 # After this is created, update providers.tf to use the S3 backend.
 
@@ -19,8 +19,28 @@ terraform {
   }
 }
 
+variable "bucket_suffix" {
+  description = "Unique suffix for S3 bucket name (e.g., account ID, company name)"
+  type        = string
+  default     = ""
+}
+
+variable "aws_region" {
+  description = "AWS region for state resources"
+  type        = string
+  default     = "us-east-1"
+}
+
+locals {
+  # Generate a unique bucket name using account ID if no suffix provided
+  bucket_name = var.bucket_suffix != "" ? "vel-terraform-state-${var.bucket_suffix}" : "vel-terraform-state-${data.aws_caller_identity.current.account_id}"
+  lock_table_name = var.bucket_suffix != "" ? "vel-terraform-locks-${var.bucket_suffix}" : "vel-terraform-locks"
+}
+
+data "aws_caller_identity" "current" {}
+
 provider "aws" {
-  region = "us-east-1"
+  region = var.aws_region
 
   default_tags {
     tags = {
@@ -33,7 +53,7 @@ provider "aws" {
 
 # S3 bucket for Terraform state
 resource "aws_s3_bucket" "terraform_state" {
-  bucket = "vel-terraform-state"
+  bucket = local.bucket_name
 
   # Prevent accidental deletion
   lifecycle {
@@ -41,7 +61,7 @@ resource "aws_s3_bucket" "terraform_state" {
   }
 
   tags = {
-    Name = "vel-terraform-state"
+    Name = local.bucket_name
   }
 }
 
@@ -78,7 +98,7 @@ resource "aws_s3_bucket_public_access_block" "terraform_state" {
 
 # DynamoDB table for state locking
 resource "aws_dynamodb_table" "terraform_locks" {
-  name         = "vel-terraform-locks"
+  name         = local.lock_table_name
   billing_mode = "PAY_PER_REQUEST"
   hash_key     = "LockID"
 
@@ -93,7 +113,7 @@ resource "aws_dynamodb_table" "terraform_locks" {
   }
 
   tags = {
-    Name = "vel-terraform-locks"
+    Name = local.lock_table_name
   }
 }
 

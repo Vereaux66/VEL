@@ -301,6 +301,7 @@ class HealthServer:
             return
         
         self._server = HTTPServer((self.host, self.port), HealthRequestHandler)
+        self._server.timeout = 1  # Allow periodic checks of _running flag
         self._running = True
         
         self._thread = threading.Thread(
@@ -313,16 +314,20 @@ class HealthServer:
         logger.info(f"Health server started on {self.host}:{self.port}")
     
     def _serve(self) -> None:
-        """Server loop."""
-        while self._running and self._server:
-            self._server.handle_request()
+        """Server loop using serve_forever for proper shutdown handling."""
+        if not self._server:
+            return
+        self._server.serve_forever()
     
     def stop(self) -> None:
         """Stop health server."""
         self._running = False
         
         if self._server:
+            # shutdown() will cause serve_forever() to exit
             self._server.shutdown()
+            # Close the server socket promptly after shutdown
+            self._server.server_close()
             self._server = None
         
         if self._thread and self._thread.is_alive():
@@ -404,8 +409,8 @@ def check_redis_health() -> ComponentHealth:
     """Check Redis connectivity."""
     try:
         import os
-        redis_url = os.environ.get("VEL_REDIS_URL", "redis://localhost:6379")
-        # In a real implementation, attempt a Redis PING
+        # TODO: Implement actual Redis PING using this URL when redis client is available
+        redis_url = os.environ.get("VEL_REDIS_URL", "redis://localhost:6379")  # noqa: F841
         return ComponentHealth(
             name="redis",
             status=HealthStatus.HEALTHY,

@@ -3,10 +3,20 @@ require("@nomicfoundation/hardhat-verify");
 require("dotenv").config();
 
 // Load environment variables
-const PRIVATE_KEY = process.env.DEPLOYER_PRIVATE_KEY || "0x0000000000000000000000000000000000000000000000000000000000000000";
+// Note: DEPLOYER_PRIVATE_KEY must be set for non-local network deployments
+const PRIVATE_KEY = process.env.DEPLOYER_PRIVATE_KEY;
 const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || "";
 const INFURA_API_KEY = process.env.INFURA_API_KEY || "";
 const ALCHEMY_API_KEY = process.env.ALCHEMY_API_KEY || "";
+
+// Helper to get accounts array - only include if key is present
+function getAccounts() {
+  if (!PRIVATE_KEY) {
+    console.warn("WARNING: DEPLOYER_PRIVATE_KEY not set. Deployments to non-local networks will fail.");
+    return [];
+  }
+  return [PRIVATE_KEY];
+}
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
@@ -39,13 +49,13 @@ module.exports = {
     sepolia: {
       url: `https://sepolia.infura.io/v3/${INFURA_API_KEY}`,
       chainId: 11155111,
-      accounts: [PRIVATE_KEY],
+      accounts: getAccounts(),
       gasPrice: "auto",
     },
     goerli: {
       url: `https://goerli.infura.io/v3/${INFURA_API_KEY}`,
       chainId: 5,
-      accounts: [PRIVATE_KEY],
+      accounts: getAccounts(),
       gasPrice: "auto",
     },
 
@@ -53,37 +63,37 @@ module.exports = {
     mainnet: {
       url: `https://eth-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`,
       chainId: 1,
-      accounts: [PRIVATE_KEY],
+      accounts: getAccounts(),
       gasPrice: "auto",
     },
     arbitrum: {
       url: `https://arb-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`,
       chainId: 42161,
-      accounts: [PRIVATE_KEY],
+      accounts: getAccounts(),
       gasPrice: "auto",
     },
     optimism: {
       url: `https://opt-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`,
       chainId: 10,
-      accounts: [PRIVATE_KEY],
+      accounts: getAccounts(),
       gasPrice: "auto",
     },
     polygon: {
       url: `https://polygon-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`,
       chainId: 137,
-      accounts: [PRIVATE_KEY],
+      accounts: getAccounts(),
       gasPrice: "auto",
     },
     base: {
       url: `https://base-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`,
       chainId: 8453,
-      accounts: [PRIVATE_KEY],
+      accounts: getAccounts(),
       gasPrice: "auto",
     },
     bsc: {
       url: "https://bsc-dataseed.binance.org/",
       chainId: 56,
-      accounts: [PRIVATE_KEY],
+      accounts: getAccounts(),
       gasPrice: "auto",
     },
   },

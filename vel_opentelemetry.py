@@ -137,8 +137,12 @@ def init_tracing(
             "service.version": os.environ.get("VEL_VERSION", "1.0.0"),
         })
         
-        # Create tracer provider
-        _tracer_provider = TracerProvider(resource=resource)
+        # Create sampler based on sample_rate config
+        from opentelemetry.sdk.trace.sampling import TraceIdRatioBased, ParentBased
+        sampler = ParentBased(root=TraceIdRatioBased(_config.sample_rate))
+        
+        # Create tracer provider with sampler
+        _tracer_provider = TracerProvider(resource=resource, sampler=sampler)
         
         # Configure exporter based on type
         exporter = _create_exporter(_config)
@@ -188,15 +192,23 @@ def _create_exporter(config: TracingConfig):
         
         elif config.exporter_type == "otlp":
             from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+            # OTLP gRPC expects host:port format, not a URL
+            # Use insecure connection for localhost, secure for remote endpoints
+            endpoint = config.endpoint or "localhost:4317"
+            use_insecure = not config.endpoint or "localhost" in endpoint
             return OTLPSpanExporter(
-                endpoint=config.endpoint or "http://localhost:4317"
+                endpoint=endpoint,
+                insecure=use_insecure,
             )
         
         elif config.exporter_type == "xray":
             # AWS X-Ray via OTLP
             from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+            endpoint = config.endpoint or "localhost:4317"
+            use_insecure = not config.endpoint or "localhost" in endpoint
             return OTLPSpanExporter(
-                endpoint=config.endpoint or "http://localhost:4317"
+                endpoint=endpoint,
+                insecure=use_insecure,
             )
         
         else:

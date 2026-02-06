@@ -3,12 +3,13 @@
 
 # ElastiCache subnet group
 resource "aws_elasticache_subnet_group" "vel_redis" {
-  name       = "vel-redis-subnet-group"
+  name       = "vel-redis-subnet-group-${var.vel_env_name}"
   subnet_ids = module.vel_network.private_subnets
 
   tags = {
-    Name      = "vel-redis-subnet-group"
-    Component = "VEL-Cache"
+    Name        = "vel-redis-subnet-group-${var.vel_env_name}"
+    Component   = "VEL-Cache"
+    Environment = var.vel_env_name
   }
 }
 
@@ -47,7 +48,7 @@ resource "aws_security_group" "vel_redis" {
 
 # Redis parameter group
 resource "aws_elasticache_parameter_group" "vel_redis" {
-  name   = "vel-redis-params"
+  name   = "vel-redis-params-${var.vel_env_name}"
   family = "redis7"
 
   # Connection settings
@@ -68,15 +69,16 @@ resource "aws_elasticache_parameter_group" "vel_redis" {
   }
 
   tags = {
-    Name      = "vel-redis-params"
-    Component = "VEL-Cache"
+    Name        = "vel-redis-params-${var.vel_env_name}"
+    Component   = "VEL-Cache"
+    Environment = var.vel_env_name
   }
 }
 
 # Redis replication group (cluster mode disabled for simplicity)
 resource "aws_elasticache_replication_group" "vel_redis" {
-  replication_group_id = "vel-redis"
-  description          = "VEL Redis cluster for caching and sessions"
+  replication_group_id = "vel-redis-${var.vel_env_name}"
+  description          = "VEL Redis cluster for caching and sessions (${var.vel_env_name})"
 
   # Engine configuration
   engine               = "redis"
@@ -136,7 +138,7 @@ resource "aws_kms_key" "vel_redis" {
 }
 
 resource "aws_kms_alias" "vel_redis" {
-  name          = "alias/vel-redis"
+  name          = "alias/vel-redis-${var.vel_env_name}"
   target_key_id = aws_kms_key.vel_redis.key_id
 }
 

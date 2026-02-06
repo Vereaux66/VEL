@@ -476,9 +476,11 @@ class VELSystemLauncher:
             
             return True, f"Health server started on port {health_port}"
         except ImportError as e:
+            # Health server module not available - non-critical, allow boot to continue
             return True, f"Health server module not available (non-critical): {e}"
         except Exception as e:
-            return True, f"Health server init warning: {e}"
+            # Actual failure during start - report as failed
+            return False, f"Health server init failed: {e}"
 
     def _load_config(self) -> Dict[str, Any]:
         """Load system configuration from all sources."""
@@ -791,6 +793,7 @@ class VELSystemLauncher:
             health_registry = get_health_registry()
             health_registry.set_ready_to_serve(False)
         except ImportError:
+            # Health server integration is optional; if unavailable, skip readiness update.
             pass
         
         # Stop health server
