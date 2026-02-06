@@ -1,0 +1,27 @@
+{{/* VEL Trading Platform - Workload Definition */}}
+{{- $ctx := . -}}
+{{- $workloadId := printf "vel-%s-engine" .Release.Name -}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $workloadId }}
+  labels: &velCoreLabels
+    vel.kessann.bot/app: trading-engine
+    vel.kessann.bot/tier: backend
+spec:
+  replicas: {{ $ctx.Values.replicaCount }}
+  selector:
+    matchLabels: *velCoreLabels
+  template:
+    metadata:
+      labels: *velCoreLabels
+    spec:
+      containers:
+      - name: vel
+        image: {{ printf "%s:%s" $ctx.Values.image.repository $ctx.Values.image.tag }}
+        ports:
+        - containerPort: {{ $ctx.Values.service.targetPort }}
+        resources:
+          requests: { cpu: {{ $ctx.Values.resources.requests.cpu }}, memory: {{ $ctx.Values.resources.requests.memory }} }
+          limits: { cpu: {{ $ctx.Values.resources.limits.cpu }}, memory: {{ $ctx.Values.resources.limits.memory }} }

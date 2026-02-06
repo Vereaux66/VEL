@@ -1,0 +1,34 @@
+{{/* VEL Trading Platform - External Access */}}
+{{- $ctx := . -}}
+{{- if $ctx.Values.ingress.enabled -}}
+{{- $ingressId := printf "vel-%s-gateway" .Release.Name -}}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $ingressId }}
+  labels:
+    vel.kessann.bot/app: trading-engine
+    vel.kessann.bot/tier: ingress
+  annotations:
+    {{- range $k, $v := $ctx.Values.ingress.annotations }}
+    {{ $k }}: {{ $v | quote }}
+    {{- end }}
+spec:
+  ingressClassName: {{ $ctx.Values.ingress.className }}
+  rules:
+  {{- range $ctx.Values.ingress.hosts }}
+  - host: {{ .host }}
+    http:
+      paths:
+      {{- range .paths }}
+      - path: {{ .path }}
+        pathType: {{ .pathType }}
+        backend:
+          service:
+            name: vel-{{ $ctx.Release.Name }}-endpoint
+            port:
+              number: {{ $ctx.Values.service.port }}
+      {{- end }}
+  {{- end }}
+{{- end }}
