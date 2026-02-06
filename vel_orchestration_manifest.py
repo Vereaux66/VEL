@@ -641,11 +641,21 @@ class OrchestrationManifest:
     # ══════════════════════════════════════════════════════════════
 
     def _init_brain(self) -> Any:
+        """Initialize AI core (using consolidated ai.core module)."""
         try:
-            from anvel_brain import AnvelBrain
-            return AnvelBrain()
+            from ai.core import AISupervisor
+            event_bus = self.components.get("event_bus")
+            return AISupervisor(event_bus=event_bus)
+        except ImportError:
+            # Fallback to legacy brain if ai.core not available
+            try:
+                from anvel_brain import AnvelBrain
+                return AnvelBrain()
+            except Exception as e:
+                logger.warning(f"Brain init: {e}")
+                return None
         except Exception as e:
-            logger.warning(f"Brain init: {e}")
+            logger.warning(f"AI Supervisor init: {e}")
             return None
 
     def _init_strategy_runner(self) -> Any:

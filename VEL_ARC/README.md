@@ -19,6 +19,14 @@ VEL_ARC/
 ├── cex_brokers/                 # Removed CEX broker modules
 │   ├── anvel_broker_coinbase.py # Archived Coinbase data feed adapter
 │   └── anvel_broker_kraken.py   # Archived Kraken data feed adapter
+├── anvel_ai_legacy/             # Consolidated AI modules
+│   ├── anvel_advanced_ai_core.py
+│   ├── anvel_autonomous_core.py
+│   ├── anvel_brain_modules.py
+│   ├── anvel_consciousness.py
+│   ├── anvel_evolving_code_repair.py
+│   ├── anvel_import_repairer.py
+│   └── anvel_predictive_healing.py
 ├── legacy_entry_points/         # Deprecated entry points (reserved)
 └── deprecated_anvel_modules/    # Other deprecated ANVEL modules (reserved)
 ```
@@ -48,6 +56,43 @@ Price discovery should now use:
 - **Decentralized oracles**: Chainlink, Band Protocol, or similar
 - **DEX aggregators**: 1inch, 0x Protocol for best execution prices
 
+## ANVEL AI Legacy Archive
+
+### Reason for Consolidation
+
+The AI modules have been consolidated into a unified `ai/` package to:
+
+1. **Reduce code duplication**: Single source of truth for AI functionality
+2. **Improve maintainability**: Fewer files to manage and test
+3. **Ensure consistency**: Unified APIs and behavior
+4. **Remove dead code**: Stub modules and incomplete implementations removed
+
+### Consolidation Mapping
+
+| Archived Module | Consolidated Into | Notes |
+|-----------------|------------------|-------|
+| `anvel_advanced_ai_core.py` | `ai/core.py` | Training engine, encryption |
+| `anvel_autonomous_core.py` | `ai/core.py`, `ai/self_repair.py` | Self-healing, autonomous ops |
+| `anvel_brain_modules.py` | `ai/core.py` | BrainSubsystems, diagnostics |
+| `anvel_consciousness.py` | `ai/introspection.py` | Event logging, awareness |
+| `anvel_evolving_code_repair.py` | `ai/self_repair.py` | Code repair, evolution |
+| `anvel_import_repairer.py` | `ai/self_repair.py` | Import repair strategies |
+| `anvel_predictive_healing.py` | `ai/introspection.py` | Predictive analysis |
+
+### New Import Paths
+
+```python
+# OLD (deprecated)
+from anvel_advanced_ai_core import get_ai_core
+from anvel_import_repairer import get_repairer
+from anvel_brain_modules import BrainSubsystems
+
+# NEW (use these)
+from ai.core import AICore, AISupervisor, BrainSubsystems
+from ai.self_repair import create_import_repairer
+from ai.introspection import IntrospectionEngine
+```
+
 ## CI/CD Enforcement
 
 The CI pipeline includes a check to prevent reintroduction of CEX modules:
@@ -63,4 +108,5 @@ The CI pipeline includes a check to prevent reintroduction of CEX modules:
 ---
 
 **Archive Created**: 2024-02-06
-**Policy**: DEX-only trading enforcement
+**Policy**: DEX-only trading, AI consolidation
+**Status**: Active archival

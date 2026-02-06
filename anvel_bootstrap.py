@@ -26,10 +26,9 @@ def _safe_import(module_name: str, class_name: str) -> Tuple[Any, Optional[str]]
     global _import_repair_results, _import_attempts
 
     try:
-        # First, try importing the repairer
-        from anvel_import_repairer import get_repairer
-
-        repairer = get_repairer()
+        # Try consolidated AI self-repair module first
+        from ai.self_repair import create_import_repairer
+        repairer = create_import_repairer()
 
         obj, repair_result = repairer.safe_import(module_name, class_name)
         if repair_result:
