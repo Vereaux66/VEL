@@ -13,23 +13,211 @@ Usage:
     python START_ANVEL.py              # Deterministic boot (default)
     python START_ANVEL.py --legacy     # Legacy ANVEL_MASTER boot
     python START_ANVEL.py --monitor    # Runtime monitoring only
+    python START_ANVEL.py --skip-validation  # Skip pre-boot validation
     python START_ANVEL.py --help       # Show help
 """
 
+import logging
 import sys
 import os
+from pathlib import Path
+from typing import List, Tuple
 
 # Ensure we're in the correct directory
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger("anvel.startup")
+
+
+class PreBootValidator:
+    """
+    Validates environment, configuration, and connectivity before boot.
+    
+    Fail-fast on critical issues - no silent defaults allowed.
+    """
+    
+    def __init__(self):
+        self.errors: List[str] = []
+        self.warnings: List[str] = []
+    
+    def validate_all(self) -> Tuple[bool, List[str], List[str]]:
+        """
+        Run all validation checks.
+        
+        Returns:
+            Tuple of (success, errors, warnings)
+        """
+        self._validate_python_version()
+        self._validate_environment_variables()
+        self._validate_config_files()
+        self._validate_directories()
+        self._validate_db_connectivity()
+        self._validate_rpc_connectivity()
+        
+        return len(self.errors) == 0, self.errors, self.warnings
+    
+    def _validate_python_version(self) -> None:
+        """Ensure Python version is compatible."""
+        if sys.version_info < (3, 10):
+            self.errors.append(
+                f"Python 3.10+ required (for type union syntax and match statements), "
+                f"found {sys.version_info.major}.{sys.version_info.minor}"
+            )
+    
+    def _validate_environment_variables(self) -> None:
+        """Validate required environment variables exist."""
+        # Required for production mode
+        env = os.environ.get("ANVEL_ENVIRONMENT", "development")
+        
+        if env == "production":
+            required_vars = [
+                "ANVEL_DATABASE_URL",
+            ]
+            
+            for var in required_vars:
+                if not os.environ.get(var):
+                    self.errors.append(f"Missing required environment variable: {var}")
+            
+            # Warn about sensitive variables that should be set
+            sensitive_vars = [
+                "ANVEL_WALLET_PRIVATE_KEY",
+                "ANVEL_KRAKEN_API_KEY",
+                "ANVEL_COINBASE_API_KEY",
+            ]
+            
+            for var in sensitive_vars:
+                if not os.environ.get(var):
+                    self.warnings.append(f"Production mode: {var} not set (trading may be limited)")
+        
+        # Check for debug mode in production
+        if env == "production" and os.environ.get("ANVEL_DEBUG", "").lower() == "true":
+            self.errors.append("ANVEL_DEBUG must not be 'true' in production")
+    
+    def _validate_config_files(self) -> None:
+        """Validate required configuration files exist."""
+        config_dir = Path("config")
+        required_configs = ["system.json", "trading.json", "networks.json"]
+        env = os.environ.get("ANVEL_ENVIRONMENT", "development")
+        
+        if config_dir.exists():
+            for cfg in required_configs:
+                cfg_path = config_dir / cfg
+                if not cfg_path.exists():
+                    if env == "production":
+                        # In production, missing configs are errors
+                        self.errors.append(f"Required configuration file missing: {cfg_path}")
+                    else:
+                        self.warnings.append(f"Configuration file missing: {cfg_path}")
+        else:
+            # Check for main config
+            if not Path("anvel_config.json").exists():
+                if env == "production":
+                    self.errors.append("No configuration directory or anvel_config.json found")
+                else:
+                    self.warnings.append("No configuration directory or anvel_config.json found")
+    
+    def _validate_directories(self) -> None:
+        """Validate data directories are writable."""
+        data_dir = Path(os.environ.get("ANVEL_DATA_DIR", "data"))
+        logs_dir = Path("logs")
+        
+        for dir_path in [data_dir, logs_dir]:
+            try:
+                dir_path.mkdir(parents=True, exist_ok=True)
+                # Test write permissions
+                test_file = dir_path / ".write_test"
+                test_file.touch()
+                test_file.unlink()
+            except (PermissionError, OSError) as e:
+                self.errors.append(f"Cannot write to directory {dir_path}: {e}")
+    
+    def _validate_db_connectivity(self) -> None:
+        """Check database connectivity with actual connection test."""
+        db_url = os.environ.get("ANVEL_DATABASE_URL", "")
+        
+        if not db_url:
+            return
+        
+        if db_url.startswith("sqlite"):
+            # For SQLite, just check the path is accessible
+            db_path = db_url.replace("sqlite:///", "")
+            db_dir = Path(db_path).parent
+            if not db_dir.exists():
+                try:
+                    db_dir.mkdir(parents=True, exist_ok=True)
+                except (PermissionError, OSError) as e:
+                    self.errors.append(f"Cannot create SQLite database directory: {e}")
+        else:
+            # For PostgreSQL/other databases, attempt actual connection with timeout
+            try:
+                import psycopg2
+                # Parse connection string or use as-is
+                conn = psycopg2.connect(db_url, connect_timeout=5)
+                conn.close()
+                logger.info("Database connectivity verified")
+            except ImportError:
+                self.warnings.append("psycopg2 not available - database connectivity will be verified during boot")
+            except Exception as e:
+                self.errors.append(f"Database connection failed: {e}")
+    
+    def _validate_rpc_connectivity(self) -> None:
+        """Check RPC endpoint connectivity with actual health check."""
+        trading_enabled = os.environ.get("ANVEL_TRADING_ENABLED", "false").lower() == "true"
+        
+        if not trading_enabled:
+            return
+        
+        rpc_vars = [
+            ("ANVEL_ETHEREUM_RPC_URL", "Ethereum"),
+            ("ANVEL_ARBITRUM_RPC_URL", "Arbitrum"),
+            ("ANVEL_POLYGON_RPC_URL", "Polygon"),
+        ]
+        
+        configured_rpcs = [(var, name, os.environ.get(var)) for var, name, in rpc_vars if os.environ.get(var)]
+        
+        if not configured_rpcs:
+            self.errors.append("Trading enabled but no RPC endpoints configured")
+            return
+        
+        # Test connectivity to each configured RPC endpoint
+        try:
+            import requests
+            for var, name, url in configured_rpcs:
+                try:
+                    # Standard JSON-RPC health check (eth_chainId)
+                    response = requests.post(
+                        url,
+                        json={"jsonrpc": "2.0", "method": "eth_chainId", "params": [], "id": 1},
+                        timeout=5,
+                        headers={"Content-Type": "application/json"}
+                    )
+                    if response.status_code == 200:
+                        logger.info(f"{name} RPC connectivity verified")
+                    else:
+                        self.warnings.append(f"{name} RPC returned status {response.status_code}")
+                except requests.exceptions.Timeout:
+                    self.warnings.append(f"{name} RPC connection timed out (5s)")
+                except requests.exceptions.ConnectionError as e:
+                    self.errors.append(f"{name} RPC unreachable: {e}")
+                except Exception as e:
+                    self.warnings.append(f"{name} RPC check failed: {e}")
+        except ImportError:
+            self.warnings.append("requests library not available - RPC connectivity will be verified during boot")
 
 
 def show_help():
     """Display help information"""
     print(__doc__)
     print("\nOptions:")
-    print("  --legacy    Use legacy ANVEL_MASTER boot path")
-    print("  --monitor   Launch runtime monitoring dashboard")
-    print("  --help      Show this help message")
+    print("  --legacy           Use legacy ANVEL_MASTER boot path")
+    print("  --monitor          Launch runtime monitoring dashboard")
+    print("  --skip-validation  Skip pre-boot validation checks")
+    print("  --help             Show this help message")
     print("\nFor most users, just run: python START_ANVEL.py")
     print()
 
@@ -40,10 +228,10 @@ def launch_monitor():
         from anvel_ultimate_runtime import main as monitor_main
         monitor_main()
     except ImportError as e:
-        print(f"Error: Could not import monitoring module: {e}")
+        logger.error(f"Could not import monitoring module: {e}")
         sys.exit(1)
     except Exception as e:
-        print(f"Error launching monitor: {e}")
+        logger.error(f"Error launching monitor: {e}")
         sys.exit(1)
 
 
@@ -52,10 +240,8 @@ def launch_orchestrated():
     try:
         from vel_orchestration_manifest import OrchestrationManifest
         import json
-        from pathlib import Path
 
-        print("Starting ANVEL via OrchestrationManifest (deterministic boot)...")
-        print()
+        logger.info("Starting ANVEL via OrchestrationManifest (deterministic boot)...")
 
         # Load config
         config = {}
@@ -68,41 +254,44 @@ def launch_orchestrated():
         boot_report = manifest.execute_boot_sequence()
 
         if not boot_report.success:
-            print(f"\n✗ Boot failed at phase {boot_report.failed_phase}: "
-                  f"{boot_report.failure_reason}")
-            print(f"  Components online: {len(boot_report.components_online)}")
-            print(f"  Components failed: {boot_report.components_failed}")
-            print("\nFalling back to legacy ANVEL_MASTER boot...")
+            logger.error(
+                f"Boot failed at phase {boot_report.failed_phase}: "
+                f"{boot_report.failure_reason}"
+            )
+            logger.error(f"Components online: {len(boot_report.components_online)}")
+            logger.error(f"Components failed: {boot_report.components_failed}")
+            logger.warning("Falling back to legacy ANVEL_MASTER boot...")
             launch_legacy()
             return
 
-        print(f"\n✓ ANVEL SYSTEM ONLINE")
-        print(f"  Components: {len(boot_report.components_online)} online")
-        print(f"  Boot time:  {boot_report.total_duration_seconds:.1f}s")
+        logger.info("=" * 50)
+        logger.info("ANVEL SYSTEM ONLINE")
+        logger.info(f"  Components: {len(boot_report.components_online)} online")
+        logger.info(f"  Boot time:  {boot_report.total_duration_seconds:.1f}s")
         if boot_report.warnings:
-            print(f"  Warnings:   {len(boot_report.warnings)}")
+            logger.warning(f"  Warnings:   {len(boot_report.warnings)}")
+        logger.info("=" * 50)
 
-        print("\n  Press ENTER to stop system, or Ctrl+C for emergency stop")
-        print()
+        print("\n  Press ENTER to stop system, or Ctrl+C for emergency stop\n")
 
         # Wait for shutdown signal
         try:
             input()
         except KeyboardInterrupt:
-            print("\n\n⚠ Interrupt received")
+            logger.warning("Interrupt received")
 
         # Graceful shutdown in reverse boot order
-        print("\nInitiating graceful shutdown...")
+        logger.info("Initiating graceful shutdown...")
         shutdown_report = manifest.execute_shutdown_sequence()
         stopped = sum(1 for v in shutdown_report.values() if v == "stopped")
-        print(f"✓ ANVEL stopped ({stopped} components shut down)")
+        logger.info(f"ANVEL stopped ({stopped} components shut down)")
 
     except ImportError:
-        print("OrchestrationManifest not available — using legacy boot")
+        logger.warning("OrchestrationManifest not available — using legacy boot")
         launch_legacy()
     except Exception as e:
-        print(f"Error in orchestrated boot: {e}")
-        print("Falling back to legacy ANVEL_MASTER boot...")
+        logger.error(f"Error in orchestrated boot: {e}")
+        logger.warning("Falling back to legacy ANVEL_MASTER boot...")
         launch_legacy()
 
 
@@ -112,11 +301,40 @@ def launch_legacy():
         from ANVEL_MASTER import main as master_main
         master_main()
     except ImportError as e:
-        print(f"Error: Could not import ANVEL_MASTER: {e}")
+        logger.error(f"Could not import ANVEL_MASTER: {e}")
         sys.exit(1)
     except Exception as e:
-        print(f"Error launching system: {e}")
+        logger.error(f"Error launching system: {e}")
         sys.exit(1)
+
+
+def run_pre_boot_validation() -> bool:
+    """
+    Run pre-boot validation checks.
+    
+    Returns:
+        True if validation passed, False otherwise
+    """
+    validator = PreBootValidator()
+    success, errors, warnings = validator.validate_all()
+    
+    if warnings:
+        for warning in warnings:
+            logger.warning(f"Pre-boot warning: {warning}")
+    
+    if not success:
+        logger.error("=" * 50)
+        logger.error("PRE-BOOT VALIDATION FAILED")
+        logger.error("=" * 50)
+        for error in errors:
+            logger.error(f"  ✗ {error}")
+        logger.error("")
+        logger.error("Fix the above issues before starting ANVEL.")
+        logger.error("Use --skip-validation to bypass (not recommended)")
+        return False
+    
+    logger.info("Pre-boot validation passed")
+    return True
 
 
 def main():
@@ -128,12 +346,19 @@ def main():
         return
 
     if "--monitor" in args:
-        print("Launching runtime monitor...")
+        logger.info("Launching runtime monitor...")
         launch_monitor()
         return
 
+    # Run pre-boot validation unless skipped
+    skip_validation = "--skip-validation" in args
+    
+    if not skip_validation:
+        if not run_pre_boot_validation():
+            sys.exit(1)
+
     if "--legacy" in args or "--wizard" in args:
-        print("Launching via legacy ANVEL_MASTER...")
+        logger.info("Launching via legacy ANVEL_MASTER...")
         launch_legacy()
         return
 
