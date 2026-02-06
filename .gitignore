@@ -30,6 +30,11 @@ wheels/
 node_modules/
 npm-debug.log
 yarn-error.log
+package-lock.json
+
+# Frontend build
+frontend/dist/
+frontend/node_modules/
 
 # IDE and editors
 .idea/

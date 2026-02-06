@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Orbitron:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <title>VEL | Decentralized Trading System</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body, #root { width: 100%; height: 100%; background: #000; color: #00ffff; font-family: 'JetBrains Mono', monospace; }
+    .loader { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #000; z-index: 99999; }
+    .loader-ring { width: 60px; height: 60px; border: 3px solid transparent; border-top-color: #00ffff; border-radius: 50%; animation: spin 1s linear infinite; }
+    @keyframes spin { 100% { transform: rotate(360deg); } }
+    .loader-text { margin-top: 20px; font-family: 'Orbitron', monospace; font-size: 12px; letter-spacing: 4px; color: #00ffff; text-shadow: 0 0 10px #00ffff; }
+  </style>
+</head>
+<body>
+  <div id="root">
+    <div class="loader">
+      <div class="loader-ring"></div>
+      <div class="loader-text">INITIALIZING VEL...</div>
+    </div>
+  </div>
+  <script type="module" src="/src/main.jsx"></script>
+</body>
+</html>
