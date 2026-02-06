@@ -14,7 +14,7 @@ image:
 service:
   type: ClusterIP
   port: 80
-  targetPort: 8080
+  targetPort: 5000
 
 ingress:
   enabled: true
@@ -22,6 +22,8 @@ ingress:
   annotations:
     kubernetes.io/ingress.class: alb
     alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/healthcheck-path: /health
   hosts:
     - host: kessann.bot
       paths:
@@ -41,6 +43,22 @@ autoscaling:
   minReplicas: 6
   maxReplicas: 24
   targetCPUUtilizationPercentage: 70
+
+# VEL Backend Environment Configuration
+# IMPORTANT: Set these values in production via --set or values override file
+# Do NOT deploy with empty values - auto-generated secrets are not persisted
+velConfig:
+  flaskSecretKey: ""      # Required: Set via --set velConfig.flaskSecretKey=<value>
+  jwtSecretKey: ""        # Required: Set via --set velConfig.jwtSecretKey=<value>
+  webPassword: ""         # Required: Min 12 chars, set via --set velConfig.webPassword=<value>
+  dbPassword: ""          # Required: Set via --set velConfig.dbPassword=<value>
+  corsOrigins: "https://kessann.bot,https://*.kessann.bot"
+  redisHost: "vel-redis"
+  redisPort: "6379"
+  dbHost: "vel-postgres"
+  dbPort: "5432"
+  dbName: "veltrading"
+  dbUser: "veluser"
 
 nodeSelector: {}
 

@@ -11,7 +11,11 @@ metadata:
     vel.kessann.bot/tier: backend
 spec:
   type: {{ $ctx.Values.service.type }}
-  selector: *velSvcLabels
+  selector:
+    vel.kessann.bot/app: trading-engine
+    vel.kessann.bot/tier: backend
   ports:
-  - port: {{ $ctx.Values.service.port }}
+  - name: vel-api
+    port: {{ $ctx.Values.service.port }}
     targetPort: {{ $ctx.Values.service.targetPort }}
+    protocol: TCP
