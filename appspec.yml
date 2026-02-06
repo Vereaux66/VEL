@@ -1,0 +1,27 @@
+version: 0.0
+# VEL Trading Platform - AWS CodeDeploy Application Specification
+# Used for deployment to EC2/ECS when not using EKS
+
+Resources:
+  - TargetService:
+      Type: AWS::ECS::Service
+      Properties:
+        TaskDefinition: <TASK_DEFINITION>
+        LoadBalancerInfo:
+          ContainerName: "vel-trading"
+          ContainerPort: 5000
+        PlatformVersion: "LATEST"
+        NetworkConfiguration:
+          AwsvpcConfiguration:
+            Subnets:
+              - "<SUBNET_1>"
+              - "<SUBNET_2>"
+            SecurityGroups:
+              - "<SECURITY_GROUP>"
+            AssignPublicIp: "ENABLED"
+
+Hooks:
+  - BeforeInstall: "scripts/before_install.sh"
+  - AfterInstall: "scripts/after_install.sh"
+  - ApplicationStart: "scripts/application_start.sh"
+  - ValidateService: "scripts/validate_service.sh"

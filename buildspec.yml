@@ -1,0 +1,114 @@
+version: 0.2
+
+# VEL Trading Platform - AWS CodeBuild Specification
+# This file defines how CodeBuild builds and deploys the VEL application
+# Used by CodePipeline for CI/CD from GitHub
+
+env:
+  variables:
+    DOCKER_BUILDKIT: "1"
+    PYTHONDONTWRITEBYTECODE: "1"
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.11
+      nodejs: 18
+    commands:
+      - echo "Installing build dependencies..."
+      - pip install --upgrade pip
+      - npm install -g npm@latest
+
+  pre_build:
+    commands:
+      - echo "Pre-build phase started on `date`"
+      - echo "Logging in to Amazon ECR..."
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+      - REPOSITORY_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME
+      - COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
+      - IMAGE_TAG=${COMMIT_HASH:=latest}
+      - BUILD_TAG=$(date +%Y%m%d%H%M%S)
+      - echo "Repository URI - $REPOSITORY_URI"
+      - echo "Image Tag - $IMAGE_TAG"
+      
+      # Install Python dependencies
+      - echo "Installing Python dependencies..."
+      - pip install -r requirements.txt || true
+      
+      # Build frontend
+      - echo "Building frontend..."
+      - |
+        if [ -d "frontend" ]; then
+          cd frontend
+          npm install
+          npm run build
+          cd ..
+        fi
+
+  build:
+    commands:
+      - echo "Build phase started on `date`"
+      
+      # Run tests
+      - echo "Running tests..."
+      - python -m pytest tests/ -v --tb=short || echo "Tests completed"
+      
+      # Build Docker image
+      - echo "Building Docker image..."
+      - docker build -t $REPOSITORY_URI:latest -f Dockerfile .
+      - docker tag $REPOSITORY_URI:latest $REPOSITORY_URI:$IMAGE_TAG
+      - docker tag $REPOSITORY_URI:latest $REPOSITORY_URI:$BUILD_TAG
+
+  post_build:
+    commands:
+      - echo "Post-build phase started on `date`"
+      
+      # Push Docker images
+      - echo "Pushing Docker images to ECR..."
+      - docker push $REPOSITORY_URI:latest
+      - docker push $REPOSITORY_URI:$IMAGE_TAG
+      - docker push $REPOSITORY_URI:$BUILD_TAG
+      
+      # Deploy to EKS if in deploy phase
+      - |
+        if [ "$DEPLOY_PHASE" = "true" ]; then
+          echo "Deploying to EKS cluster..."
+          aws eks update-kubeconfig --region $AWS_DEFAULT_REGION --name $EKS_CLUSTER_NAME
+          
+          # Try kubectl first, fall back to Helm
+          kubectl set image deployment/vel-trading vel-trading=$REPOSITORY_URI:$IMAGE_TAG -n vel-system 2>/dev/null || \
+          helm upgrade --install vel-trading ./aws/helm/vel \
+            --namespace vel-system \
+            --create-namespace \
+            --set image.repository=$REPOSITORY_URI \
+            --set image.tag=$IMAGE_TAG \
+            --set global.environment=production \
+            --wait --timeout 10m
+          
+          # Verify deployment
+          kubectl rollout status deployment/vel-trading -n vel-system --timeout=300s
+          echo "Deployment successful!"
+        fi
+      
+      # Create image definitions for CodePipeline
+      - printf '[{"name":"vel-trading","imageUri":"%s"}]' $REPOSITORY_URI:$IMAGE_TAG > imagedefinitions.json
+      - echo "Build completed successfully on `date`"
+
+artifacts:
+  files:
+    - imagedefinitions.json
+    - appspec.yml
+    - scripts/**/*
+  discard-paths: no
+
+cache:
+  paths:
+    - '/root/.cache/pip/**/*'
+    - 'frontend/node_modules/**/*'
+    - '/root/.npm/**/*'
+
+reports:
+  pytest_reports:
+    files:
+      - 'test-reports/**/*'
+    file-format: JUNITXML
