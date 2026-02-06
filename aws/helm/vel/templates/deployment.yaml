@@ -1,0 +1,75 @@
+{{/* VEL Trading Platform - Workload Definition */}}
+{{- $ctx := . -}}
+{{- $workloadId := printf "vel-%s-engine" .Release.Name -}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $workloadId }}
+  labels: &velCoreLabels
+    vel.kessann.bot/app: trading-engine
+    vel.kessann.bot/tier: backend
+spec:
+  replicas: {{ $ctx.Values.replicaCount }}
+  selector:
+    matchLabels: *velCoreLabels
+  template:
+    metadata:
+      labels: *velCoreLabels
+    spec:
+      containers:
+      - name: vel
+        image: {{ printf "%s:%s" $ctx.Values.image.repository $ctx.Values.image.tag }}
+        ports:
+        - containerPort: {{ $ctx.Values.service.targetPort }}
+          name: vel-api
+        env:
+        - name: ANVEL_CORS_ORIGINS
+          value: {{ $ctx.Values.velConfig.corsOrigins | quote }}
+        - name: REDIS_HOST
+          value: {{ $ctx.Values.velConfig.redisHost | quote }}
+        - name: REDIS_PORT
+          value: {{ $ctx.Values.velConfig.redisPort | quote }}
+        - name: DB_HOST
+          value: {{ $ctx.Values.velConfig.dbHost | quote }}
+        - name: DB_PORT
+          value: {{ $ctx.Values.velConfig.dbPort | quote }}
+        - name: DB_NAME
+          value: {{ $ctx.Values.velConfig.dbName | quote }}
+        - name: DB_USER
+          value: {{ $ctx.Values.velConfig.dbUser | quote }}
+        - name: FLASK_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: vel-secrets
+              key: flask-secret-key
+        - name: JWT_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: vel-secrets
+              key: jwt-secret-key
+        - name: ANVEL_WEB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: vel-secrets
+              key: web-password
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: vel-secrets
+              key: db-password
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: vel-api
+          initialDelaySeconds: 30
+          periodSeconds: 15
+        readinessProbe:
+          httpGet:
+            path: /api/readiness
+            port: vel-api
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        resources:
+          requests: { cpu: {{ $ctx.Values.resources.requests.cpu }}, memory: {{ $ctx.Values.resources.requests.memory }} }
+          limits: { cpu: {{ $ctx.Values.resources.limits.cpu }}, memory: {{ $ctx.Values.resources.limits.memory }} }

@@ -72,7 +72,7 @@ app.config["JWT_EXPIRATION_DELTA"] = timedelta(hours=24)
 # Initialize CORS and SocketIO with secure configuration
 cors_origins = os.environ.get(
     "ANVEL_CORS_ORIGINS",
-    "http://localhost:3000,http://localhost:8080,https://*.anvelbot.app,https://*.amazonaws.com",
+    "http://localhost:3000,http://localhost:8080,https://kessann.bot,https://*.kessann.bot,https://*.anvelbot.app,https://*.amazonaws.com",
 ).split(",")
 CORS(app, origins=cors_origins)
 socketio = SocketIO(app, cors_allowed_origins=cors_origins, async_mode="threading")

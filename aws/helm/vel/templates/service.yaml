@@ -1,0 +1,21 @@
+{{/* VEL Trading Platform - Network Endpoint */}}
+{{- $ctx := . -}}
+{{- $svcId := printf "vel-%s-endpoint" .Release.Name -}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $svcId }}
+  labels: &velSvcLabels
+    vel.kessann.bot/app: trading-engine
+    vel.kessann.bot/tier: backend
+spec:
+  type: {{ $ctx.Values.service.type }}
+  selector:
+    vel.kessann.bot/app: trading-engine
+    vel.kessann.bot/tier: backend
+  ports:
+  - name: vel-api
+    port: {{ $ctx.Values.service.port }}
+    targetPort: {{ $ctx.Values.service.targetPort }}
+    protocol: TCP
