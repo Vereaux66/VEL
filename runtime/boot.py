@@ -283,6 +283,12 @@ class RuntimeBoot:
             logger.error(f"  Network registry init error: {e}")
             return False
     
+    def _handle_heartbeat_request(self, payload: dict) -> dict:
+        """Handle heartbeat request from event bus."""
+        if hasattr(self, 'heartbeat_monitor') and hasattr(self.heartbeat_monitor, 'get_status'):
+            return self.heartbeat_monitor.get_status()
+        return {"status": "ok"}
+    
     def _init_heartbeat_monitor(self) -> bool:
         """Initialize heartbeat monitor."""
         try:
@@ -293,8 +299,7 @@ class RuntimeBoot:
             
             # Register to event bus
             if self.event_bus:
-                self.event_bus.subscribe("system.heartbeat_request",
-                    lambda p: self.heartbeat_monitor.get_status() if hasattr(self.heartbeat_monitor, 'get_status') else {"status": "ok"})
+                self.event_bus.subscribe("system.heartbeat_request", self._handle_heartbeat_request)
             
             # Start monitoring
             if hasattr(self.heartbeat_monitor, 'start'):
