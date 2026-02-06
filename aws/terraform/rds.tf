@@ -76,8 +76,9 @@ resource "aws_db_instance" "vel_primary" {
   backup_window           = "03:00-04:00"
   maintenance_window      = "Mon:04:00-Mon:05:00"
   copy_tags_to_snapshot   = true
-  skip_final_snapshot     = var.vel_env_name != "production"
-  final_snapshot_identifier = var.vel_env_name != "production" ? null : "vel-final-${var.vel_env_name}-${random_id.snapshot_suffix.hex}"
+  skip_final_snapshot       = var.vel_env_name != "production"
+  # Only create final snapshot for production - null for non-production skips snapshot
+  final_snapshot_identifier = var.vel_env_name == "production" ? "vel-final-${var.vel_env_name}-${random_id.snapshot_suffix.hex}" : null
 
   # Performance Insights
   performance_insights_enabled          = true

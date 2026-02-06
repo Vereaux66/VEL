@@ -103,8 +103,10 @@ class TestDistributedLocks(unittest.TestCase):
         # Wait for timeout
         time.sleep(1.5)
         
-        # Use a new manager (simulating a different process) to acquire
-        # This tests that the lock was released due to timeout
+        # Use a new manager instance to acquire the lock
+        # This tests that the lock was released due to timeout and a new
+        # owner can acquire it. Note: this tests in-memory lock expiration,
+        # not cross-process behavior (which would require Redis).
         manager2 = DistributedLockManager(config=config)
         lock2 = manager2.acquire(LockType.WALLET, "timeout_test", blocking=False)
         self.assertIsNotNone(lock2)
