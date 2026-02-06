@@ -149,6 +149,22 @@ CREATE TRIGGER ledger_immutable_trigger
     FOR EACH ROW
     EXECUTE FUNCTION prevent_ledger_update();
 
+-- Prevent deletions from ledger entries
+CREATE OR REPLACE FUNCTION prevent_ledger_delete()
+RETURNS TRIGGER AS $$
+BEGIN
+    RAISE EXCEPTION 'Ledger entries are immutable and cannot be deleted';
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS ledger_immutable_delete_trigger ON trade_ledger;
+CREATE TRIGGER ledger_immutable_delete_trigger
+    BEFORE DELETE ON trade_ledger
+    FOR EACH ROW
+    EXECUTE FUNCTION prevent_ledger_delete();
+
+-- NOTE: TRUNCATE is not affected by row-level triggers.
+-- Ensure application roles do not have TRUNCATE privilege on trade_ledger.
 -- ============================================================================
 -- POSITIONS
 -- ============================================================================
