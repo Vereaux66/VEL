@@ -25,14 +25,13 @@ import json
 import logging
 import os
 import sys
-import threading
 import time
 import uuid
 from contextvars import ContextVar
 from datetime import datetime, timezone
 from logging.handlers import QueueHandler, QueueListener, RotatingFileHandler
 from queue import Queue
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 import re
 
 # Context variables for request tracing
@@ -368,7 +367,10 @@ def configure_logging(
         handlers.append(file_handler)
     
     # Use async logging for better performance
-    log_queue = Queue(-1)  # Unlimited size
+    # Bounded queue to prevent memory exhaustion under load spikes
+    # If queue is full, log records will be dropped (backpressure behavior)
+    max_queue_size = int(os.environ.get("VEL_LOG_QUEUE_SIZE", "10000"))
+    log_queue = Queue(max_queue_size)
     queue_handler = QueueHandler(log_queue)
     
     # Configure root logger
@@ -440,9 +442,9 @@ def init_flask_logging(app):
         g.request_id = request_id
         g.request_start_time = time.time()
         
-        # Set context variables
-        trace_id_var.set(trace_id)
-        request_id_var.set(request_id)
+        # Set context variables and store tokens for cleanup
+        g._trace_id_token = trace_id_var.set(trace_id)
+        g._request_id_token = request_id_var.set(request_id)
         
         # Log request
         logger = get_logger("vel.http")
@@ -480,5 +482,14 @@ def init_flask_logging(app):
         )
         
         return response
+    
+    @app.teardown_request
+    def teardown_request(exception=None):
+        # Reset context variables to prevent leaking IDs to subsequent requests
+        # in workers that reuse threads/greenlets
+        if hasattr(g, "_trace_id_token"):
+            trace_id_var.reset(g._trace_id_token)
+        if hasattr(g, "_request_id_token"):
+            request_id_var.reset(g._request_id_token)
     
     return app

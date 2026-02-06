@@ -14,9 +14,9 @@ Metrics Categories:
 Usage:
     from vel_prometheus_metrics import VELMetricsCollector, get_metrics_collector
     
-    # Record a trade execution
+    # Record a trade execution (latency is in seconds)
     metrics = get_metrics_collector()
-    metrics.record_execution(chain_id=1, success=True, latency_ms=150)
+    metrics.record_execution(chain_id=1, protocol="uniswap_v3", success=True, latency_seconds=0.150)
     
     # Get Prometheus metrics
     metrics.get_metrics()  # Returns Prometheus format text
@@ -28,14 +28,13 @@ import threading
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional
 
 try:
     from prometheus_client import (
         Counter,
         Gauge,
         Histogram,
-        Summary,
         CollectorRegistry,
         generate_latest,
         CONTENT_TYPE_LATEST,

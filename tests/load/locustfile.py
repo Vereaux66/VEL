@@ -23,9 +23,7 @@ Test Scenarios:
 4. WebSocket - Real-time data streams
 """
 
-import json
 import random
-import time
 from locust import HttpUser, TaskSet, task, between, events
 from locust.runners import MasterRunner
 

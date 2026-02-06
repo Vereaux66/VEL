@@ -239,5 +239,5 @@ def on_exit(server):
     try:
         if os.path.exists(ready_file):
             os.remove(ready_file)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Failed to remove ready file %s: %s", ready_file, exc)

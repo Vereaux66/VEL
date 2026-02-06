@@ -15,14 +15,11 @@ Run with: python -m pytest tests/test_production_infrastructure.py -v
 
 import json
 import logging
-import os
 import sys
 import time
 import unittest
 from decimal import Decimal
-from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 

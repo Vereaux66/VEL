@@ -35,7 +35,6 @@ from datetime import datetime, timezone, timedelta
 from decimal import Decimal
 from enum import Enum
 from typing import Any, Dict, List, Optional, Callable
-from contextlib import contextmanager
 
 logger = logging.getLogger("vel.risk.controls")
 
@@ -426,6 +425,8 @@ class RiskControlEngine:
         Returns:
             RiskDecision indicating if trade is allowed
         """
+        trigger_kill_switch_reason = None
+        
         with self._lock:
             self._check_daily_reset()
             
@@ -439,17 +440,40 @@ class RiskControlEngine:
             
             warnings = []
             
-            # Check daily loss limit
+            # Check daily loss limit - defer kill switch trigger to avoid deadlock
             if self._daily_pnl < -self.config.max_daily_loss_usd:
-                self.trigger_kill_switch(
-                    f"Daily loss limit exceeded: ${abs(self._daily_pnl)}",
-                    activated_by="risk_engine"
-                )
-                return RiskDecision(
-                    allowed=False,
-                    reason=f"Daily loss limit exceeded: ${abs(self._daily_pnl)}",
-                    event=RiskEvent.DAILY_LOSS_LIMIT_HIT
-                )
+                trigger_kill_switch_reason = f"Daily loss limit exceeded: ${abs(self._daily_pnl)}"
+                # Mark as active immediately to prevent further trades while holding lock
+                self._kill_switch_active = True
+                self._kill_switch_reason = trigger_kill_switch_reason
+                self._kill_switch_activated_at = datetime.now(timezone.utc)
+                self._kill_switch_activated_by = "risk_engine"
+        
+        # Trigger kill switch outside lock to avoid deadlock, then return
+        if trigger_kill_switch_reason:
+            # Audit and log outside the lock
+            self._audit(RiskEvent.KILL_SWITCH_ACTIVATED, {
+                "reason": trigger_kill_switch_reason,
+                "activated_by": "risk_engine",
+                "daily_pnl": str(self._daily_pnl),
+                "trade_count": self._daily_trade_count
+            })
+            logger.critical(
+                f"KILL SWITCH ACTIVATED by risk_engine: {trigger_kill_switch_reason}",
+                extra={
+                    "event": "kill_switch_activated",
+                    "reason": trigger_kill_switch_reason,
+                    "activated_by": "risk_engine"
+                }
+            )
+            return RiskDecision(
+                allowed=False,
+                reason=trigger_kill_switch_reason,
+                event=RiskEvent.DAILY_LOSS_LIMIT_HIT
+            )
+        
+        with self._lock:
+            warnings = []
             
             # Warn if approaching limit
             loss_ratio = abs(self._daily_pnl) / self.config.max_daily_loss_usd if self._daily_pnl < 0 else Decimal("0")

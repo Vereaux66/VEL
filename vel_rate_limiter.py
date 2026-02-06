@@ -360,14 +360,14 @@ class RateLimitMiddleware:
         if hasattr(request, 'user_id') and request.user_id:
             return f"user:{request.user_id}"
         
-        # Fall back to IP address
-        # Handle proxied requests
-        forwarded = request.headers.get("X-Forwarded-For")
-        if forwarded:
-            # Get first IP (client IP)
-            return f"ip:{forwarded.split(',')[0].strip()}"
-        
-        return f"ip:{request.remote_addr}"
+        # Derive client IP in a proxy-aware way without trusting headers directly
+        # Use access_route which is populated by ProxyFix or trusted proxy config
+        ip_address = None
+        if hasattr(request, "access_route") and request.access_route:
+            ip_address = request.access_route[0]
+        else:
+            ip_address = request.remote_addr
+        return f"ip:{ip_address}"
     
     def _get_limits_for_endpoint(
         self,
@@ -437,11 +437,13 @@ def rate_limit(
                 if hasattr(request, 'user_id') and request.user_id:
                     identifier = f"user:{request.user_id}"
                 else:
-                    forwarded = request.headers.get("X-Forwarded-For")
-                    if forwarded:
-                        identifier = f"ip:{forwarded.split(',')[0].strip()}"
+                    # Derive client IP in a proxy-aware way without trusting headers directly
+                    ip_address = None
+                    if hasattr(request, "access_route") and request.access_route:
+                        ip_address = request.access_route[0]
                     else:
-                        identifier = f"ip:{request.remote_addr}"
+                        ip_address = request.remote_addr
+                    identifier = f"ip:{ip_address}"
             
             # Check rate limit
             endpoint = f.__name__

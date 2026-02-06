@@ -36,12 +36,11 @@ import os
 import random
 import threading
 import time
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, asdict
 from datetime import datetime, timezone, timedelta
 from decimal import Decimal
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Set
-from contextlib import contextmanager
+from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger("vel.ai.safety")
 
@@ -166,6 +165,7 @@ class DeterministicContext:
             self._original_numpy_state = np.random.get_state()
             np.random.seed(self.seed)
         except ImportError:
+            # numpy is an optional dependency; if not available, skip numpy RNG seeding
             pass
         
         return self
@@ -181,6 +181,7 @@ class DeterministicContext:
                 import numpy as np
                 np.random.set_state(self._original_numpy_state)
             except ImportError:
+                # numpy is an optional dependency; if not available, skip restore
                 pass
         
         return False
@@ -402,15 +403,24 @@ class SafeAIExecutor:
             }
         )
         
-        # Store pending approval
-        self._pending_approvals[decision_id] = {
-            "record": record.to_dict(),
-            "requested_at": datetime.now(timezone.utc).isoformat(),
-            "timeout_at": (
-                datetime.now(timezone.utc).timestamp() + 
-                self.config.human_approval_timeout_seconds
-            )
-        }
+        # Store pending approval (thread-safe) and prune expired entries
+        with self._lock:
+            now = datetime.now(timezone.utc)
+            now_ts = now.timestamp()
+            
+            # Prune expired pending approvals to prevent unbounded growth
+            expired_ids = [
+                key for key, value in self._pending_approvals.items()
+                if value.get("timeout_at", 0) <= now_ts
+            ]
+            for key in expired_ids:
+                del self._pending_approvals[key]
+            
+            self._pending_approvals[decision_id] = {
+                "record": record.to_dict(),
+                "requested_at": now.isoformat(),
+                "timeout_at": now_ts + self.config.human_approval_timeout_seconds,
+            }
         
         # In production: Wait for external approval
         # For safety, default to rejection
@@ -430,7 +440,7 @@ class SafeAIExecutor:
         if decision_id not in self._pending_approvals:
             return False
         
-        pending = self._pending_approvals.pop(decision_id)
+        self._pending_approvals.pop(decision_id, None)
         
         logger.info(
             f"Decision {decision_id} {'approved' if approved else 'rejected'} by {approved_by}",
@@ -547,6 +557,7 @@ def safe_ai_decision(
                 try:
                     value_usd = Decimal(str(value_func(*args, **kwargs)))
                 except Exception:
+                    # Silently ignore value function errors; value_usd remains None
                     pass
             
             # Get reasoning if function provided
@@ -555,6 +566,7 @@ def safe_ai_decision(
                 try:
                     reasoning = reasoning_func(*args, **kwargs)
                 except Exception:
+                    # Silently ignore reasoning function errors; reasoning remains empty
                     pass
             
             return get_ai_executor().execute(
