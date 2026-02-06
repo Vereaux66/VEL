@@ -83,8 +83,24 @@ export const CHART_COLORS = {
   neutral: '#666'
 }
 
-// Crypto symbols for matrix rain
-export const CRYPTO_SYMBOLS = ['₿', 'Ξ', '◈', '₳', '◎', 'Ð', '₮', '◐', '⟠', '◉']
+// Crypto symbols for matrix rain - 100 popular cryptocurrency ticker symbols
+export const CRYPTO_SYMBOLS = [
+  // Top 20
+  'BTC', 'ETH', 'BNB', 'XRP', 'ADA', 'SOL', 'DOGE', 'DOT', 'AVAX', 'SHIB',
+  'MATIC', 'LTC', 'TRX', 'LINK', 'ATOM', 'UNI', 'XMR', 'ETC', 'XLM', 'BCH',
+  // 21-40
+  'ALGO', 'NEAR', 'VET', 'ICP', 'FIL', 'HBAR', 'APE', 'SAND', 'MANA', 'AXS',
+  'AAVE', 'EGLD', 'THETA', 'EOS', 'XTZ', 'FLOW', 'CHZ', 'CAKE', 'KCS', 'ZEC',
+  // 41-60
+  'MKR', 'SNX', 'COMP', 'ENJ', 'BAT', 'LRC', 'DASH', 'NEO', 'WAVES', 'ZIL',
+  'QTUM', 'ICX', 'BTT', 'ONE', 'HOT', 'IOTA', 'ONT', 'CELO', 'KSM', 'RUNE',
+  // 61-80
+  'CRV', 'YFI', 'SUSHI', 'GRT', '1INCH', 'KAVA', 'ANKR', 'AR', 'STORJ', 'REN',
+  'SKL', 'BAND', 'OCEAN', 'AUDIO', 'RAY', 'SRM', 'FTM', 'LUNA', 'GALA', 'IMX',
+  // 81-100
+  'LDO', 'APT', 'OP', 'ARB', 'SUI', 'SEI', 'TIA', 'INJ', 'PYTH', 'JTO',
+  'WIF', 'BONK', 'PEPE', 'FLOKI', 'ORDI', 'BLUR', 'STX', 'MINA', 'CFX', 'FET'
+]
 
 // Format number as currency
 export function formatCurrency(value, decimals = 2) {

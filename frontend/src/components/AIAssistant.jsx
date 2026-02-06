@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Send, Bot, Loader2 } from 'lucide-react'
+import { X, Send, Bot, Loader2, Sparkles, HelpCircle, TrendingUp, Shield, Wallet, Settings } from 'lucide-react'
 import { aiApi } from '../utils/api'
 
 export default function AIAssistant({ isOpen, onClose }) {
@@ -8,7 +8,15 @@ export default function AIAssistant({ isOpen, onClose }) {
     {
       id: 1,
       role: 'assistant',
-      content: 'Hello! I\'m your VEL AI trading assistant. I can help you with market analysis, strategy recommendations, risk assessment, and portfolio insights. What would you like to know?'
+      content: `Hello! 👋 I'm your VEL AI Trading Assistant.
+
+I have full knowledge of the VEL platform and can help you with:
+• Trading strategies and market analysis
+• Risk management and portfolio insights
+• Platform features and how-to guides
+• Account settings and security
+
+What would you like to know?`
     }
   ])
   const [input, setInput] = useState('')
@@ -41,10 +49,19 @@ export default function AIAssistant({ isOpen, onClose }) {
         content: response.response
       }])
     } catch (error) {
+      // Provide helpful offline response
       setMessages(prev => [...prev, {
         id: Date.now(),
         role: 'assistant',
-        content: 'I apologize, but I encountered an error processing your request. Please try again.'
+        content: `I'm currently unable to connect to the server, but I can still help!
+
+**Quick Answers:**
+• **Start Trading**: Go to Trading Terminal → Select Strategy → Choose Risk Level → Click Start
+• **View Portfolio**: Check the Dashboard for all your metrics
+• **Deposit/Withdraw**: Use the Wallet section
+• **Security**: Enable 2FA in Settings → Security
+
+Please try your question again in a moment, or check your connection.`
       }])
     } finally {
       setLoading(false)
@@ -59,10 +76,12 @@ export default function AIAssistant({ isOpen, onClose }) {
   }
 
   const quickActions = [
-    'Analyze current market',
-    'Show my portfolio risk',
-    'Suggest trading strategy',
-    'Recent performance summary'
+    { label: 'What is VEL?', icon: HelpCircle },
+    { label: 'What can you do?', icon: Sparkles },
+    { label: 'Trading strategies', icon: TrendingUp },
+    { label: 'Risk management', icon: Shield },
+    { label: 'Wallet & funds', icon: Wallet },
+    { label: 'System status', icon: Settings }
   ]
 
   return (
@@ -78,12 +97,13 @@ export default function AIAssistant({ isOpen, onClose }) {
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b border-plasma-purple/20">
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-plasma-purple to-plasma-cyan flex items-center justify-center">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-plasma-purple to-plasma-cyan flex items-center justify-center relative">
                 <Bot size={20} className="text-void" />
+                <span className="absolute -top-1 -right-1 w-3 h-3 bg-neon-green rounded-full animate-pulse" />
               </div>
               <div>
                 <h3 className="font-display text-plasma-purple">VEL AI</h3>
-                <p className="text-xs text-gray-500">Trading Assistant</p>
+                <p className="text-xs text-neon-green">● Online & Ready</p>
               </div>
             </div>
             <button
@@ -104,13 +124,13 @@ export default function AIAssistant({ isOpen, onClose }) {
                 className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <div
-                  className={`max-w-[80%] p-3 rounded-xl ${
+                  className={`max-w-[85%] p-3 rounded-xl ${
                     msg.role === 'user'
                       ? 'bg-plasma-cyan/20 text-plasma-cyan'
                       : 'bg-plasma-purple/10 text-gray-300'
                   }`}
                 >
-                  <p className="text-sm font-mono whitespace-pre-wrap">{msg.content}</p>
+                  <p className="text-sm font-mono whitespace-pre-wrap leading-relaxed">{msg.content}</p>
                 </div>
               </motion.div>
             ))}
@@ -121,8 +141,9 @@ export default function AIAssistant({ isOpen, onClose }) {
                 animate={{ opacity: 1 }}
                 className="flex justify-start"
               >
-                <div className="bg-plasma-purple/10 p-3 rounded-xl">
-                  <Loader2 size={20} className="animate-spin text-plasma-purple" />
+                <div className="bg-plasma-purple/10 p-3 rounded-xl flex items-center space-x-2">
+                  <Loader2 size={18} className="animate-spin text-plasma-purple" />
+                  <span className="text-xs text-gray-400 font-mono">Analyzing...</span>
                 </div>
               </motion.div>
             )}
@@ -132,14 +153,16 @@ export default function AIAssistant({ isOpen, onClose }) {
 
           {/* Quick Actions */}
           <div className="p-4 border-t border-plasma-purple/20">
-            <div className="flex flex-wrap gap-2 mb-4">
-              {quickActions.map((action) => (
+            <p className="text-xs text-gray-500 mb-2 font-mono">Quick Questions:</p>
+            <div className="grid grid-cols-2 gap-2 mb-4">
+              {quickActions.map(({ label, icon: Icon }) => (
                 <button
-                  key={action}
-                  onClick={() => setInput(action)}
-                  className="text-xs px-3 py-1.5 rounded-full bg-plasma-purple/10 text-plasma-purple hover:bg-plasma-purple/20 transition-colors font-mono"
+                  key={label}
+                  onClick={() => setInput(label)}
+                  className="flex items-center space-x-2 text-xs px-3 py-2 rounded-lg bg-plasma-purple/10 text-plasma-purple hover:bg-plasma-purple/20 transition-colors font-mono text-left"
                 >
-                  {action}
+                  <Icon size={14} />
+                  <span className="truncate">{label}</span>
                 </button>
               ))}
             </div>
@@ -151,7 +174,7 @@ export default function AIAssistant({ isOpen, onClose }) {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyPress={handleKeyPress}
-                placeholder="Ask anything about trading..."
+                placeholder="Ask me anything about VEL..."
                 className="flex-1 bg-deep-space border border-plasma-purple/30 rounded-xl px-4 py-3 text-sm font-mono text-white placeholder-gray-500 focus:outline-none focus:border-plasma-purple focus:shadow-glow-purple transition-all"
               />
               <button
