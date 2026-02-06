@@ -35,6 +35,7 @@ class BootPhase(Enum):
     EXECUTION = "execution_pipeline"
     WORKERS = "schedulers_workers"
     MONITORING = "monitoring_layer"
+    HEALTH_SERVER = "health_server"
     SPINE_CHECK = "execution_spine_verification"
     BREAKERS = "circuit_breaker_activation"
     READY = "system_ready"
@@ -448,8 +449,38 @@ class VELSystemLauncher:
         self.persistence: Optional[PersistenceManager] = None
         self.spine: Optional[ExecutionSpine] = None
         self.breaker_ctrl: Optional[CircuitBreakerController] = None
+        self.health_server: Optional[Any] = None
         self.boot_start_time: float = 0
         self.current_phase = BootPhase.PREFLIGHT
+
+    def _init_health_server(self) -> Tuple[bool, str]:
+        """Initialize health check server for Kubernetes probes."""
+        try:
+            from vel_health_server import (
+                HealthServer, 
+                get_health_registry,
+                register_standard_checks
+            )
+            
+            # Get health port from env or default
+            health_port = int(os.environ.get("VEL_HEALTH_PORT", "8080"))
+            
+            # Register standard health checks
+            register_standard_checks()
+            
+            # Start health server
+            self.health_server = HealthServer(port=health_port)
+            self.health_server.start()
+            
+            self.registry.register("health_server", self.health_server)
+            
+            return True, f"Health server started on port {health_port}"
+        except ImportError as e:
+            # Health server module not available - non-critical, allow boot to continue
+            return True, f"Health server module not available (non-critical): {e}"
+        except Exception as e:
+            # Actual failure during start - report as failed
+            return False, f"Health server init failed: {e}"
 
     def _load_config(self) -> Dict[str, Any]:
         """Load system configuration from all sources."""
@@ -672,6 +703,20 @@ class VELSystemLauncher:
             OutputFormatter.warn(msg)
 
         # ═══════════════════════════════════════════════════════════════
+        # PHASE 7.5: HEALTH SERVER (Kubernetes probes)
+        # ═══════════════════════════════════════════════════════════════
+        OutputFormatter.phase("7.5 HEALTH SERVER")
+        self.current_phase = BootPhase.HEALTH_SERVER
+        report.phase_reached = BootPhase.HEALTH_SERVER
+        
+        ok, msg = self._init_health_server()
+        if ok:
+            OutputFormatter.ok(msg)
+            report.services_online.append("health_server")
+        else:
+            OutputFormatter.warn(msg)
+
+        # ═══════════════════════════════════════════════════════════════
         # PHASE 8: EXECUTION SPINE VERIFICATION
         # ═══════════════════════════════════════════════════════════════
         OutputFormatter.phase("8. EXECUTION SPINE VERIFICATION")
@@ -712,6 +757,15 @@ class VELSystemLauncher:
         report.boot_duration_sec = time.time() - self.boot_start_time
         report.success = True
 
+        # Mark health registry as ready for Kubernetes probes
+        try:
+            from vel_health_server import get_health_registry
+            health_registry = get_health_registry()
+            health_registry.set_startup_complete(True)
+            health_registry.set_ready_to_serve(True)
+        except ImportError:
+            pass  # Health server module not available
+
         OutputFormatter.banner("SYSTEM READY")
         print(f"  Services online: {len(report.services_online)}")
         print(f"  Boot duration:   {report.boot_duration_sec:.2f}s")
@@ -732,6 +786,23 @@ class VELSystemLauncher:
     def shutdown(self) -> Dict[str, str]:
         """Graceful shutdown in reverse initialization order."""
         OutputFormatter.phase("SHUTDOWN SEQUENCE")
+        
+        # Mark health as not ready before shutdown
+        try:
+            from vel_health_server import get_health_registry
+            health_registry = get_health_registry()
+            health_registry.set_ready_to_serve(False)
+        except ImportError:
+            # Health server integration is optional; if unavailable, skip readiness update.
+            pass
+        
+        # Stop health server
+        if self.health_server:
+            try:
+                self.health_server.stop()
+                OutputFormatter.ok("Health server stopped")
+            except Exception as e:
+                OutputFormatter.warn(f"Health server stop error: {e}")
         
         # Save state before shutdown
         if self.persistence:
