@@ -9,15 +9,25 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.0"
+    }
   }
 
-  # Recommended: Configure remote state for team collaboration
+  # S3 Backend with DynamoDB State Locking
+  # Uncomment the following block for production deployment:
+  #
   # backend "s3" {
   #   bucket         = "vel-terraform-state"
   #   key            = "prod/infrastructure.tfstate"
   #   region         = "us-east-1"
   #   encrypt        = true
   #   dynamodb_table = "vel-terraform-locks"
+  #   
+  #   # Use workspaces for different environments
+  #   # terraform workspace new staging
+  #   # terraform workspace select production
   # }
 }
 
@@ -32,3 +42,6 @@ provider "aws" {
     }
   }
 }
+
+# Random provider for generating secure passwords and IDs
+provider "random" {}

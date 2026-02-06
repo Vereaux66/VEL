@@ -121,6 +121,27 @@ output "vel_waf_acl_id" {
 }
 
 # =============================================================================
+# Redis Outputs
+# =============================================================================
+
+output "vel_redis_endpoint" {
+  description = "Primary endpoint for VEL Redis cluster"
+  value       = aws_elasticache_replication_group.vel_redis.primary_endpoint_address
+  sensitive   = true
+}
+
+output "vel_redis_reader_endpoint" {
+  description = "Reader endpoint for VEL Redis cluster"
+  value       = aws_elasticache_replication_group.vel_redis.reader_endpoint_address
+  sensitive   = true
+}
+
+output "vel_redis_auth_secret_arn" {
+  description = "ARN of the Redis AUTH token secret"
+  value       = aws_secretsmanager_secret.vel_redis_auth.arn
+}
+
+# =============================================================================
 # ALB Outputs
 # =============================================================================
 

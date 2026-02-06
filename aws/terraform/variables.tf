@@ -150,3 +150,33 @@ variable "vel_waf_block_suspicious_ua" {
   type        = bool
   default     = false
 }
+
+# =============================================================================
+# Redis Configuration
+# =============================================================================
+
+variable "vel_redis_node_type" {
+  description = "ElastiCache node type for Redis"
+  type        = string
+  default     = "cache.r6g.large"
+}
+
+# =============================================================================
+# Autoscaling Configuration
+# =============================================================================
+
+variable "vel_autoscaling" {
+  description = "Autoscaling configuration for VEL pods"
+  type = object({
+    min_replicas          = number
+    max_replicas          = number
+    cpu_target_percent    = number
+    memory_target_percent = number
+  })
+  default = {
+    min_replicas          = 3
+    max_replicas          = 50
+    cpu_target_percent    = 70
+    memory_target_percent = 80
+  }
+}

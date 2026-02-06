@@ -1,0 +1,22 @@
+apiVersion: v2
+name: vel-trading
+description: VEL Trading Platform Helm Chart
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+
+maintainers:
+  - name: VEL Team
+    email: team@vel.trading
+
+keywords:
+  - trading
+  - defi
+  - dex
+  - cryptocurrency
+
+home: https://github.com/Vereaux66/VEL
+sources:
+  - https://github.com/Vereaux66/VEL
+
+dependencies: []
