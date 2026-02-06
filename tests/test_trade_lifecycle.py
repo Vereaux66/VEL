@@ -283,18 +283,10 @@ class TestPartialFillHandling(unittest.TestCase):
     """Test partial fill scenarios."""
     
     def test_partial_fill_detection(self):
-        """Test that partial fills are properly detected and handled."""
-        # Create mock trade engine that returns partial fill
+        """Test that pipeline handles missing broker gracefully even with mock engine."""
+        # Create mock trade engine - but pipeline will fail before reaching it
+        # because no broker_factory is configured
         mock_engine = MagicMock()
-        mock_engine.execute_trade.return_value = {
-            "success": True,
-            "status": "partial",
-            "tx_hash": "0x123...",
-            "amount_out": Decimal("75"),
-            "amount_filled": Decimal("75"),
-            "amount_requested": Decimal("100"),
-            "fill_percentage": 75.0,
-        }
         
         # Create mock risk kernel that passes
         mock_kernel = MagicMock()
@@ -317,9 +309,10 @@ class TestPartialFillHandling(unittest.TestCase):
         
         result = pipeline.execute(payload)
         
-        # When broker is unavailable, execution fails gracefully
-        # This test validates the pipeline handles the no-broker case
+        # Without a broker_factory, the pipeline cannot get a broker
+        # and execution fails gracefully with a clear error
         self.assertEqual(result.status, ExecutionStatus.FAILED)
+        self.assertIn("broker", result.error.lower())
 
 
 @unittest.skipUnless(PIPELINE_AVAILABLE, "Runtime pipeline module required")
