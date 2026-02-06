@@ -88,12 +88,13 @@ export const CRYPTO_SYMBOLS = ['₿', 'Ξ', '◈', '₳', '◎', 'Ð', '₮', '�
 
 // Format number as currency
 export function formatCurrency(value, decimals = 2) {
+  if (value == null || isNaN(value)) return '$0.00'
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals
-  }).format(value)
+  }).format(Number(value))
 }
 
 // Format percentage
@@ -105,10 +106,13 @@ export function formatPercentage(value, decimals = 2) {
 
 // Format large numbers
 export function formatNumber(value) {
-  if (value >= 1e9) return (value / 1e9).toFixed(2) + 'B'
-  if (value >= 1e6) return (value / 1e6).toFixed(2) + 'M'
-  if (value >= 1e3) return (value / 1e3).toFixed(2) + 'K'
-  return value.toFixed(2)
+  if (value == null || isNaN(value)) return '0'
+  const num = Math.abs(Number(value))
+  const sign = value < 0 ? '-' : ''
+  if (num >= 1e9) return sign + (num / 1e9).toFixed(2) + 'B'
+  if (num >= 1e6) return sign + (num / 1e6).toFixed(2) + 'M'
+  if (num >= 1e3) return sign + (num / 1e3).toFixed(2) + 'K'
+  return sign + num.toFixed(2)
 }
 
 // Format date/time

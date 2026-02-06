@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { api } from '../utils/api'
 
 const AuthContext = createContext(null)
@@ -7,6 +7,13 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [token, setToken] = useState(localStorage.getItem('vel_token'))
   const [loading, setLoading] = useState(true)
+
+  const logout = useCallback(() => {
+    localStorage.removeItem('vel_token')
+    localStorage.removeItem('vel_session')
+    setToken(null)
+    setUser(null)
+  }, [])
 
   useEffect(() => {
     const initAuth = async () => {
@@ -28,7 +35,7 @@ export function AuthProvider({ children }) {
       setLoading(false)
     }
     initAuth()
-  }, [])
+  }, [token, logout])
 
   const login = async (username, password, totpCode = null) => {
     try {
@@ -52,13 +59,6 @@ export function AuthProvider({ children }) {
     } catch (error) {
       return { success: false, error: error.message }
     }
-  }
-
-  const logout = () => {
-    localStorage.removeItem('vel_token')
-    localStorage.removeItem('vel_session')
-    setToken(null)
-    setUser(null)
   }
 
   const value = {

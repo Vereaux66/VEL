@@ -59,9 +59,9 @@ export default function Dashboard() {
   ]
 
   const trades = dashboardData?.trades || [
-    { id: 1, timestamp: new Date(), pair: 'BTC/USDT', side: 'BUY', price: 44500, quantity: 0.1, total: 4450, pnl: 225, status: 'completed' },
-    { id: 2, timestamp: new Date(), pair: 'ETH/USDT', side: 'SELL', price: 2480, quantity: 2, total: 4960, pnl: 180, status: 'completed' },
-    { id: 3, timestamp: new Date(), pair: 'SOL/USDT', side: 'BUY', price: 108, quantity: 50, total: 5400, pnl: -75, status: 'completed' }
+    { id: 1, timestamp: new Date(Date.now() - 5 * 60000), pair: 'BTC/USDT', side: 'BUY', price: 44500, quantity: 0.1, total: 4450, pnl: 225, status: 'completed' },
+    { id: 2, timestamp: new Date(Date.now() - 15 * 60000), pair: 'ETH/USDT', side: 'SELL', price: 2480, quantity: 2, total: 4960, pnl: 180, status: 'completed' },
+    { id: 3, timestamp: new Date(Date.now() - 45 * 60000), pair: 'SOL/USDT', side: 'BUY', price: 108, quantity: 50, total: 5400, pnl: -75, status: 'completed' }
   ]
 
   // Mock performance data if not loaded

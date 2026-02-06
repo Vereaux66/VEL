@@ -21,8 +21,18 @@ export default function MatrixRain() {
     const columns = Math.floor(canvas.width / fontSize)
     const drops = Array(columns).fill(1)
 
-    // Draw function
-    const draw = () => {
+    let lastTime = 0
+    const frameInterval = 50 // ~20fps for matrix effect
+    let animationId
+
+    // Draw function using requestAnimationFrame
+    const draw = (currentTime) => {
+      animationId = requestAnimationFrame(draw)
+      
+      // Throttle to ~20fps for authentic matrix look
+      if (currentTime - lastTime < frameInterval) return
+      lastTime = currentTime
+
       // Fade effect
       ctx.fillStyle = 'rgba(0, 0, 0, 0.05)'
       ctx.fillRect(0, 0, canvas.width, canvas.height)
@@ -52,11 +62,11 @@ export default function MatrixRain() {
       })
     }
 
-    // Animation loop
-    const interval = setInterval(draw, 50)
+    // Start animation
+    animationId = requestAnimationFrame(draw)
 
     return () => {
-      clearInterval(interval)
+      cancelAnimationFrame(animationId)
       window.removeEventListener('resize', resizeCanvas)
     }
   }, [])
