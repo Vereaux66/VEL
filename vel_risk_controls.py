@@ -559,6 +559,9 @@ class RiskControlEngine:
             token: Token traded
             position_change_usd: Change in position value
         """
+        should_trigger_kill_switch = False
+        kill_switch_reason = ""
+        
         with self._lock:
             self._daily_pnl += pnl_usd
             self._daily_trade_count += 1
@@ -577,12 +580,17 @@ class RiskControlEngine:
                 }
             )
             
-            # Check if loss limit hit
+            # Check if loss limit hit - defer trigger to avoid deadlock
             if self._daily_pnl < -self.config.max_daily_loss_usd:
-                self.trigger_kill_switch(
-                    f"Daily loss limit hit: ${abs(self._daily_pnl)}",
-                    activated_by="risk_engine"
-                )
+                should_trigger_kill_switch = True
+                kill_switch_reason = f"Daily loss limit hit: ${abs(self._daily_pnl)}"
+        
+        # Trigger kill switch outside the lock to avoid deadlock
+        if should_trigger_kill_switch:
+            self.trigger_kill_switch(
+                kill_switch_reason,
+                activated_by="risk_engine"
+            )
     
     # ─────────────────────────────────────────────────────────────────────────
     # Status and Metrics
