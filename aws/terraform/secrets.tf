@@ -1,0 +1,170 @@
+# VEL Trading Platform - AWS Secrets Manager Configuration
+# Centralized secrets management for VEL infrastructure
+
+# Primary secrets store for VEL application
+resource "aws_secretsmanager_secret" "vel_app_secrets" {
+  name                    = "vel/${var.vel_env_name}/app-secrets"
+  description             = "VEL application secrets including API keys and credentials"
+  recovery_window_in_days = var.vel_env_name == "production" ? 30 : 7
+  kms_key_id              = aws_kms_key.vel_secrets.arn
+
+  tags = {
+    Name        = "vel-app-secrets"
+    Component   = "VEL-Security"
+    Environment = var.vel_env_name
+  }
+}
+
+# Secret version with initial values
+# NOTE: For production, consider using AWS Secrets Manager's native RDS integration
+# (rotation lambda) instead of storing DB_HOST directly. This version is simplified
+# for initial deployment. See: https://docs.aws.amazon.com/secretsmanager/latest/userguide/integrating_how-services-use-secrets_RDS.html
+resource "aws_secretsmanager_secret_version" "vel_app_secrets" {
+  secret_id = aws_secretsmanager_secret.vel_app_secrets.id
+  secret_string = jsonencode({
+    # Database credentials
+    DB_HOST     = aws_db_instance.vel_primary.endpoint
+    DB_PORT     = "5432"
+    DB_NAME     = var.vel_db_name
+    DB_USER     = var.vel_db_username
+    DB_PASSWORD = random_password.vel_db_password.result
+
+    # Application secrets (generated)
+    FLASK_SECRET_KEY = random_password.vel_flask_secret.result
+    JWT_SECRET_KEY   = random_password.vel_jwt_secret.result
+
+    # Redis configuration
+    REDIS_HOST = var.vel_redis_endpoint
+    REDIS_PORT = "6379"
+  })
+
+  # Note: We do NOT use ignore_changes here so that Terraform can update
+  # the secret when infrastructure changes (e.g., RDS endpoint changes).
+  # For production, consider using AWS Secrets Manager's native RDS integration
+  # which automatically handles credential rotation.
+}
+
+# Separate secret for exchange API keys (manually populated)
+resource "aws_secretsmanager_secret" "vel_exchange_keys" {
+  name                    = "vel/${var.vel_env_name}/exchange-keys"
+  description             = "Exchange API keys for VEL trading operations"
+  recovery_window_in_days = var.vel_env_name == "production" ? 30 : 7
+  kms_key_id              = aws_kms_key.vel_secrets.arn
+
+  tags = {
+    Name        = "vel-exchange-keys"
+    Component   = "VEL-Security"
+    Environment = var.vel_env_name
+  }
+}
+
+# Separate secret for wallet keys (manually populated)
+resource "aws_secretsmanager_secret" "vel_wallet_keys" {
+  name                    = "vel/${var.vel_env_name}/wallet-keys"
+  description             = "Wallet private keys for VEL DEX operations"
+  recovery_window_in_days = var.vel_env_name == "production" ? 30 : 7
+  kms_key_id              = aws_kms_key.vel_secrets.arn
+
+  tags = {
+    Name        = "vel-wallet-keys"
+    Component   = "VEL-Security"
+    Environment = var.vel_env_name
+  }
+}
+
+# KMS key for secrets encryption
+resource "aws_kms_key" "vel_secrets" {
+  description             = "KMS key for VEL Secrets Manager encryption"
+  deletion_window_in_days = 30
+  enable_key_rotation     = true
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "Enable IAM User Permissions"
+        Effect = "Allow"
+        Principal = {
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+        }
+        Action   = "kms:*"
+        Resource = "*"
+      },
+      {
+        Sid    = "Allow EKS pods to use key"
+        Effect = "Allow"
+        Principal = {
+          AWS = aws_iam_role.vel_workload_identity.arn
+        }
+        Action = [
+          "kms:Decrypt",
+          "kms:DescribeKey"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+
+  tags = {
+    Name      = "vel-secrets-kms"
+    Component = "VEL-Security"
+  }
+}
+
+resource "aws_kms_alias" "vel_secrets" {
+  name          = "alias/vel-secrets"
+  target_key_id = aws_kms_key.vel_secrets.key_id
+}
+
+# Random passwords for application secrets
+resource "random_password" "vel_flask_secret" {
+  length           = 64
+  special          = true
+  override_special = "!#$%&*()-_=+[]{}<>:?"
+}
+
+resource "random_password" "vel_jwt_secret" {
+  length           = 64
+  special          = true
+  override_special = "!#$%&*()-_=+[]{}<>:?"
+}
+
+# IAM policy for EKS pods to access secrets
+resource "aws_iam_role_policy" "vel_secrets_access" {
+  name = "vel-secrets-access"
+  role = aws_iam_role.vel_workload_identity.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue",
+          "secretsmanager:DescribeSecret"
+        ]
+        Resource = [
+          aws_secretsmanager_secret.vel_app_secrets.arn,
+          aws_secretsmanager_secret.vel_exchange_keys.arn,
+          aws_secretsmanager_secret.vel_wallet_keys.arn
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "kms:Decrypt",
+          "kms:DescribeKey"
+        ]
+        Resource = aws_kms_key.vel_secrets.arn
+      }
+    ]
+  })
+}
+
+# NOTE: Secrets rotation is currently disabled because the rotation Lambda
+# function (aws_lambda_function.vel_secret_rotation) has not been implemented yet.
+# When the Lambda is available, reintroduce an aws_secretsmanager_secret_rotation
+# resource here that references the implemented function.
+
+# Data source for current AWS account
+data "aws_caller_identity" "current" {}
