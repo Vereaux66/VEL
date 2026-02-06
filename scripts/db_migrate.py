@@ -315,16 +315,24 @@ class DatabaseMigrator:
             cursor = self.conn.cursor()
             
             # Split and execute statements
+            # Note: All migration SQL comes from trusted source files only
             statements = [s.strip() for s in sql.split(';') if s.strip()]
+            skipped = []
             for stmt in statements:
                 if stmt and not stmt.startswith("--"):
                     try:
                         cursor.execute(stmt)
                     except Exception as e:
-                        logger.warning(f"Statement skipped: {e}")
+                        # Log the specific statement that failed for debugging
+                        stmt_preview = stmt[:100] + "..." if len(stmt) > 100 else stmt
+                        logger.warning(f"Statement skipped (may be PostgreSQL-specific): {stmt_preview}")
+                        logger.debug(f"Skip reason: {e}")
+                        skipped.append(stmt_preview)
             
             self.conn.commit()
             logger.info(f"Initialized schema from {schema_file}")
+            if skipped:
+                logger.warning(f"Skipped {len(skipped)} statements (see debug log for details)")
             return True
         except Exception as e:
             self.conn.rollback()

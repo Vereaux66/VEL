@@ -65,7 +65,8 @@ class PreBootValidator:
         """Ensure Python version is compatible."""
         if sys.version_info < (3, 10):
             self.errors.append(
-                f"Python 3.10+ required, found {sys.version_info.major}.{sys.version_info.minor}"
+                f"Python 3.10+ required (for type union syntax and match statements), "
+                f"found {sys.version_info.major}.{sys.version_info.minor}"
             )
     
     def _validate_environment_variables(self) -> None:

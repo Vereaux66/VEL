@@ -2,7 +2,12 @@
 -- Version: 1.0.0
 -- 
 -- This schema provides the database structure for the ANVEL trading system.
--- Supports PostgreSQL 13+
+-- 
+-- NOTE: This schema requires PostgreSQL 13+ and uses PostgreSQL-specific features:
+-- - Trigger functions (plpgsql)
+-- - JSONB columns
+-- - PostgreSQL-specific data types
+-- For SQLite development, use the migration script which provides compatible alternatives.
 --
 -- Tables:
 -- - schema_version: Tracks migration versions

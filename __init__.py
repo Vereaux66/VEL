@@ -25,6 +25,7 @@ Use explicit imports when needed: `from ai.core import AISupervisor`
 """
 
 import logging
+from typing import Any, Dict
 
 _logger = logging.getLogger(__name__)
 
@@ -195,27 +196,31 @@ def _load_introspection():
     return _introspection_imports
 
 
-def __getattr__(name):
-    """Lazy attribute access for AI components."""
-    # Check core
-    core = _load_core()
-    if name in core:
-        return core[name]
+# Cache for combined lookup
+_combined_imports: Dict[str, Any] = None
+
+
+def _get_combined_imports() -> Dict[str, Any]:
+    """Get combined imports dictionary with caching."""
+    global _combined_imports
+    if _combined_imports is not None:
+        return _combined_imports
     
-    # Check learning
-    learning = _load_learning()
-    if name in learning:
-        return learning[name]
-    
-    # Check self-repair
-    self_repair = _load_self_repair()
-    if name in self_repair:
-        return self_repair[name]
-    
-    # Check introspection
-    introspection = _load_introspection()
-    if name in introspection:
-        return introspection[name]
+    _combined_imports = {}
+    # Load modules in order, later modules can shadow earlier ones
+    for loader in [_load_core, _load_learning, _load_self_repair, _load_introspection]:
+        try:
+            _combined_imports.update(loader())
+        except Exception:
+            pass  # Module unavailable
+    return _combined_imports
+
+
+def __getattr__(name: str) -> Any:
+    """Lazy attribute access for AI components with cached lookup."""
+    imports = _get_combined_imports()
+    if name in imports:
+        return imports[name]
     
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 

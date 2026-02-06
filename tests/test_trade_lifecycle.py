@@ -53,9 +53,6 @@ except ImportError as e:
 
 
 @unittest.skipUnless(PIPELINE_AVAILABLE, "Runtime pipeline module required")
-
-
-@unittest.skipUnless(PIPELINE_AVAILABLE, "Runtime pipeline module required")
 class TestTradeSuccessCase(unittest.TestCase):
     """Test successful trade execution scenarios."""
     
