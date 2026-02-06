@@ -31,34 +31,9 @@ class SecretSpec:
     default: Optional[str] = None
 
 
-# Known secrets used by ANVEL
+# Known secrets used by VEL (DEX-only)
+# NOTE: CEX API keys have been removed. VEL enforces DEX-only trading.
 KNOWN_SECRETS = {
-    # Exchange API keys
-    "KRAKEN_API_KEY": SecretSpec(
-        name="kraken_api_key",
-        env_var="ANVEL_KRAKEN_API_KEY",
-        required=False,
-        description="Kraken exchange API key",
-    ),
-    "KRAKEN_API_SECRET": SecretSpec(
-        name="kraken_api_secret",
-        env_var="ANVEL_KRAKEN_API_SECRET",
-        required=False,
-        description="Kraken exchange API secret",
-    ),
-    "COINBASE_API_KEY": SecretSpec(
-        name="coinbase_api_key",
-        env_var="ANVEL_COINBASE_API_KEY",
-        required=False,
-        description="Coinbase exchange API key",
-    ),
-    "COINBASE_API_SECRET": SecretSpec(
-        name="coinbase_api_secret",
-        env_var="ANVEL_COINBASE_API_SECRET",
-        required=False,
-        description="Coinbase exchange API secret",
-    ),
-    
     # Blockchain RPC endpoints
     "ETHEREUM_RPC_URL": SecretSpec(
         name="ethereum_rpc",

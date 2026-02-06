@@ -67,6 +67,22 @@ jobs:
           bandit -r . -x ./tests,./frontend -ll
         continue-on-error: true
 
+      - name: Enforce DEX-only policy (no CEX modules)
+        run: |
+          # Check for CEX broker files (should not exist in main codebase)
+          if ls anvel_broker_coinbase.py anvel_broker_kraken.py 2>/dev/null; then
+            echo "ERROR: CEX broker files detected in main codebase!"
+            echo "VEL enforces DEX-only trading. CEX modules must remain archived."
+            exit 1
+          fi
+          # Check for CEX imports in Python files
+          if grep -r "from anvel_broker_coinbase\|from anvel_broker_kraken\|import anvel_broker_coinbase\|import anvel_broker_kraken" --include="*.py" . 2>/dev/null | grep -v "VEL_ARC" | grep -v "^Binary"; then
+            echo "ERROR: CEX broker imports detected!"
+            echo "VEL enforces DEX-only trading. Remove CEX imports."
+            exit 1
+          fi
+          echo "DEX-only policy check passed"
+
       - name: Upload Bandit report
         uses: actions/upload-artifact@v4
         if: always()

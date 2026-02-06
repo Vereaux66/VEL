@@ -83,11 +83,10 @@ class PreBootValidator:
                 if not os.environ.get(var):
                     self.errors.append(f"Missing required environment variable: {var}")
             
-            # Warn about sensitive variables that should be set
+            # VEL is DEX-only - no CEX API keys needed
+            # Price discovery uses on-chain data from DEX pools or oracles
             sensitive_vars = [
                 "ANVEL_WALLET_PRIVATE_KEY",
-                "ANVEL_KRAKEN_API_KEY",
-                "ANVEL_COINBASE_API_KEY",
             ]
             
             for var in sensitive_vars:
