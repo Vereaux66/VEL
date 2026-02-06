@@ -1,0 +1,68 @@
+{{/* VEL Trading Platform - Horizontal Pod Autoscaler */}}
+{{- if .Values.autoscaling.enabled -}}
+{{- $ctx := . -}}
+{{- $workloadId := printf "vel-%s-engine" .Release.Name -}}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ $workloadId }}-hpa
+  labels:
+    vel.kessann.bot/app: trading-engine
+    vel.kessann.bot/tier: backend
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ $workloadId }}
+  minReplicas: {{ $ctx.Values.autoscaling.minReplicas }}
+  maxReplicas: {{ $ctx.Values.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ $ctx.Values.autoscaling.targetCPUUtilizationPercentage }}
+    {{- if $ctx.Values.autoscaling.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ $ctx.Values.autoscaling.targetMemoryUtilizationPercentage }}
+    {{- end }}
+    {{- if $ctx.Values.autoscaling.customMetrics }}
+    {{- range $ctx.Values.autoscaling.customMetrics }}
+    - type: Pods
+      pods:
+        metric:
+          name: {{ .name }}
+        target:
+          type: AverageValue
+          averageValue: {{ .targetAverageValue }}
+    {{- end }}
+    {{- end }}
+  behavior:
+    scaleDown:
+      # Reduced for trading platforms to optimize resources quickly
+      stabilizationWindowSeconds: 120
+      policies:
+        - type: Percent
+          value: 10
+          periodSeconds: 60
+        - type: Pods
+          value: 2
+          periodSeconds: 60
+      selectPolicy: Min
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 15
+        - type: Pods
+          value: 4
+          periodSeconds: 15
+      selectPolicy: Max
+{{- end }}

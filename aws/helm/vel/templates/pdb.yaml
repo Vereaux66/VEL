@@ -1,0 +1,25 @@
+{{/* VEL Trading Platform - Pod Disruption Budget */}}
+{{- if .Values.podDisruptionBudget.enabled -}}
+{{- $ctx := . -}}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: vel-{{ .Release.Name }}-pdb
+  labels:
+    vel.kessann.bot/app: trading-engine
+    vel.kessann.bot/tier: backend
+spec:
+  {{- if $ctx.Values.podDisruptionBudget.minAvailable }}
+  minAvailable: {{ $ctx.Values.podDisruptionBudget.minAvailable }}
+  {{- else if $ctx.Values.podDisruptionBudget.maxUnavailable }}
+  maxUnavailable: {{ $ctx.Values.podDisruptionBudget.maxUnavailable }}
+  {{- else }}
+  # Default: ensure at least 50% of pods are available
+  minAvailable: 50%
+  {{- end }}
+  selector:
+    matchLabels:
+      vel.kessann.bot/app: trading-engine
+      vel.kessann.bot/tier: backend
+{{- end }}

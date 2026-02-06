@@ -14,7 +14,7 @@ image:
 service:
   type: ClusterIP
   port: 80
-  targetPort: 5000
+  targetPort: 8080  # Gunicorn listens on 8080
 
 ingress:
   enabled: true
@@ -43,6 +43,29 @@ autoscaling:
   minReplicas: 6
   maxReplicas: 24
   targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+  # Custom metrics for trading-specific autoscaling
+  customMetrics: []
+  #  - name: vel_queue_depth
+  #    targetAverageValue: "100"
+  #  - name: vel_execution_latency_seconds
+  #    targetAverageValue: "500m"
+
+# Pod Disruption Budget - ensures high availability during updates
+podDisruptionBudget:
+  enabled: true
+  minAvailable: "50%"
+  # Alternative: maxUnavailable: 1
+
+# Prometheus ServiceMonitor for metrics scraping
+# NOTE: Requires Prometheus Operator CRDs to be installed in the cluster
+# Set to false if Prometheus Operator is not available
+monitoring:
+  enabled: false
+  scrapeInterval: "30s"
+  scrapeTimeout: "10s"
+  labels: {}
+  #  release: prometheus
 
 # VEL Backend Environment Configuration
 # IMPORTANT: Set these values in production via --set or values override file

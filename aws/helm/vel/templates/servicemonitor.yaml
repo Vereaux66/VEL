@@ -1,0 +1,27 @@
+{{/* VEL Trading Platform - ServiceMonitor for Prometheus */}}
+{{- if .Values.monitoring.enabled -}}
+{{- $ctx := . -}}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: vel-{{ .Release.Name }}-monitor
+  labels:
+    vel.kessann.bot/app: trading-engine
+    vel.kessann.bot/tier: backend
+    {{- if $ctx.Values.monitoring.labels }}
+    {{- toYaml $ctx.Values.monitoring.labels | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      vel.kessann.bot/app: trading-engine
+  endpoints:
+    - port: vel-api
+      path: /metrics
+      interval: {{ $ctx.Values.monitoring.scrapeInterval | default "30s" }}
+      scrapeTimeout: {{ $ctx.Values.monitoring.scrapeTimeout | default "10s" }}
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+{{- end }}

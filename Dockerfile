@@ -29,7 +29,12 @@ FROM python:3.11-slim AS production
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    # Gunicorn settings
+    GUNICORN_WORKERS=4 \
+    GUNICORN_BIND=0.0.0.0:8080 \
+    GUNICORN_TIMEOUT=120 \
+    GUNICORN_WORKER_CLASS=eventlet
 
 # Create non-root user for security
 RUN groupadd -r vel && useradd -r -g vel vel
@@ -44,8 +49,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy requirements first for better caching
 COPY requirements.txt .
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Install Python dependencies including gunicorn
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir gunicorn eventlet
 
 # Copy application code
 COPY --chown=vel:vel *.py ./
@@ -58,17 +64,17 @@ COPY --chown=vel:vel tests/ ./tests/
 COPY --from=frontend-builder --chown=vel:vel /app/frontend/dist ./frontend/dist
 
 # Create necessary directories
-RUN mkdir -p logs data backups && chown -R vel:vel logs data backups
+RUN mkdir -p logs data backups /dev/shm && chown -R vel:vel logs data backups
 
 # Switch to non-root user
 USER vel
 
-# Expose port (5000 for API, frontend is built and served via API)
-EXPOSE 5000
+# Expose port (8080 for Gunicorn)
+EXPOSE 8080
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:5000/health || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
 
-# Default command
-CMD ["python", "anvel_web_server.py"]
+# Production command - use Gunicorn with config file
+CMD ["gunicorn", "-c", "gunicorn.conf.py", "wsgi:app"]
