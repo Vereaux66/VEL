@@ -392,13 +392,17 @@ class RiskControlEngine:
     def get_kill_switch_status(self) -> Dict[str, Any]:
         """Get detailed kill switch status."""
         with self._lock:
-            return {
-                "active": self._kill_switch_active,
-                "reason": self._kill_switch_reason,
-                "activated_at": self._kill_switch_activated_at.isoformat() if self._kill_switch_activated_at else None,
-                "activated_by": self._kill_switch_activated_by,
-                "cooldown_remaining": self._get_cooldown_remaining()
-            }
+            return self._get_kill_switch_status_internal()
+    
+    def _get_kill_switch_status_internal(self) -> Dict[str, Any]:
+        """Internal method to get kill switch status without acquiring lock."""
+        return {
+            "active": self._kill_switch_active,
+            "reason": self._kill_switch_reason,
+            "activated_at": self._kill_switch_activated_at.isoformat() if self._kill_switch_activated_at else None,
+            "activated_by": self._kill_switch_activated_by,
+            "cooldown_remaining": self._get_cooldown_remaining()
+        }
     
     def _get_cooldown_remaining(self) -> int:
         """Get remaining cooldown seconds."""
@@ -601,7 +605,7 @@ class RiskControlEngine:
         with self._lock:
             self._check_daily_reset()
             return {
-                "kill_switch": self.get_kill_switch_status(),
+                "kill_switch": self._get_kill_switch_status_internal(),
                 "daily_pnl_usd": str(self._daily_pnl),
                 "daily_loss_limit_usd": str(self.config.max_daily_loss_usd),
                 "daily_loss_utilization": str(abs(self._daily_pnl) / self.config.max_daily_loss_usd * 100) if self._daily_pnl < 0 else "0",
