@@ -440,11 +440,53 @@ class OrchestrationManifest:
 
     def _load_config(self) -> Dict[str, Any]:
         import json
+        
+        # Load main config file
         config_path = self.project_root / "anvel_config.json"
         if config_path.exists():
             with open(config_path, "r") as f:
                 loaded = json.load(f)
             self.config.update(loaded)
+        
+        # Validate configuration files using schema validator
+        try:
+            from vel_config_validator import validate_configuration, ValidationResult
+            config_dir = self.project_root / "config"
+            
+            if config_dir.exists():
+                result: ValidationResult = validate_configuration(str(config_dir))
+                
+                # Log validation warnings
+                for warning in result.warnings:
+                    logger.warning(
+                        f"Config validation warning: {warning.config_file} - "
+                        f"{warning.field_path}: {warning.message}"
+                    )
+                
+                # Fail on validation errors (halt boot on invalid configuration)
+                if not result.is_valid:
+                    error_messages = [
+                        f"{e.config_file}/{e.field_path}: {e.message}"
+                        for e in result.errors
+                    ]
+                    raise RuntimeError(
+                        f"Configuration validation failed: {'; '.join(error_messages)}"
+                    )
+                
+                # Merge validated configs
+                for config_name, config_data in result.validated_configs.items():
+                    key = config_name.replace(".json", "_config")
+                    self.config[key] = config_data
+                
+                logger.info("Configuration validated successfully")
+        except ImportError:
+            logger.debug("Config validator not available, skipping schema validation")
+        except RuntimeError:
+            # Re-raise validation errors
+            raise
+        except Exception as e:
+            logger.warning(f"Config validation error (non-fatal): {e}")
+        
         return self.config
 
     # ══════════════════════════════════════════════════════════════
