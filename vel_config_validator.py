@@ -22,7 +22,7 @@ import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("vel.config.validator")
 
@@ -121,29 +121,12 @@ TRADING_CONFIG_SCHEMA = {
 }
 
 NETWORKS_CONFIG_SCHEMA = {
-    # Per-chain configuration
+    # Per-chain configuration - validated as object existence only
+    # (nested validation not implemented; use application-level validation)
     "chains": {
         "type": "object",
         "required": False,
-        "description": "Per-chain settings",
-        "nested_schema": {
-            "enabled": {
-                "type": "boolean",
-                "required": False,
-                "default": True
-            },
-            "max_gas_gwei": {
-                "type": "integer",
-                "required": False,
-                "min": 1,
-                "max": 10000
-            },
-            "rpc_endpoints": {
-                "type": "array",
-                "required": False,
-                "items_type": "string"
-            }
-        }
+        "description": "Per-chain settings"
     }
 }
 
@@ -355,7 +338,10 @@ class ConfigValidator:
         schema: Dict[str, Any],
         result: ValidationResult
     ) -> None:
-        """Validate a single configuration file against its schema."""
+        """Validate a single configuration file against its schema.
+        
+        Also applies default values for missing optional fields.
+        """
         
         for field_name, field_schema in schema.items():
             field_path = field_name
@@ -371,8 +357,10 @@ class ConfigValidator:
                 )
                 continue
             
-            # Skip validation if field not present and has default
+            # Apply default value if field not present and has default
             if value is None:
+                if "default" in field_schema:
+                    config_data[field_name] = field_schema["default"]
                 continue
             
             # Type validation
@@ -434,21 +422,30 @@ class ConfigValidator:
     def _validate_cross_config(self, result: ValidationResult) -> None:
         """Validate relationships between config files."""
         configs = result.validated_configs
+        env = os.environ.get("ANVEL_ENVIRONMENT", "development")
         
         # Infrastructure + trading mode consistency
         if "trading.json" in configs and "infrastructure.json" in configs:
             trading = configs["trading.json"]
             infra = configs["infrastructure.json"]
             
-            # Live trading requires database
+            # Live trading requires database - error in production, warning otherwise
             if trading.get("trading_mode") == "live":
                 if not infra.get("database_url"):
-                    result.add_warning(
-                        "trading.json",
-                        "trading_mode",
-                        "missing_dependency",
-                        "Live trading mode recommended with database URL configured"
-                    )
+                    if env == "production":
+                        result.add_error(
+                            "trading.json",
+                            "trading_mode",
+                            "missing_dependency",
+                            "Live trading mode requires database URL configured in production environment"
+                        )
+                    else:
+                        result.add_warning(
+                            "trading.json",
+                            "trading_mode",
+                            "missing_dependency",
+                            "Live trading mode recommended with database URL configured"
+                        )
         
         # System environment + debug flag
         if "system.json" in configs:

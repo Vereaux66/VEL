@@ -463,7 +463,7 @@ class OrchestrationManifest:
                         f"{warning.field_path}: {warning.message}"
                     )
                 
-                # Fail on validation errors in strict mode
+                # Fail on validation errors (halt boot on invalid configuration)
                 if not result.is_valid:
                     error_messages = [
                         f"{e.config_file}/{e.field_path}: {e.message}"

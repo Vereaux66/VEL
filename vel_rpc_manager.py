@@ -23,8 +23,9 @@ import logging
 import random
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlparse
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, TypeVar
 
@@ -68,7 +69,10 @@ class RPCProviderConfig:
 
 @dataclass
 class ProviderHealth:
-    """Health metrics for an RPC provider."""
+    """Health metrics for an RPC provider.
+    
+    Thread-safe: all metric updates are protected by an internal lock.
+    """
     provider_name: str
     chain_id: int
     status: ProviderStatus = ProviderStatus.HEALTHY
@@ -85,48 +89,54 @@ class ProviderHealth:
     rate_limit_reset_time: Optional[datetime] = None
     cooldown_until: Optional[datetime] = None
     
+    def __post_init__(self):
+        """Initialize internal lock for thread safety."""
+        self._lock = threading.Lock()
+    
     def update_success(self, latency_ms: float) -> None:
-        """Update metrics after successful request."""
-        self.total_requests += 1
-        self.successful_requests += 1
-        self.consecutive_failures = 0
-        self.last_success_time = datetime.now(timezone.utc)
-        
-        # Update rolling average latency
-        if self.avg_latency_ms == 0:
-            self.avg_latency_ms = latency_ms
-        else:
-            # Exponential moving average
-            self.avg_latency_ms = 0.9 * self.avg_latency_ms + 0.1 * latency_ms
-        
-        # Recalculate health score
-        self._recalculate_score()
+        """Update metrics after successful request (thread-safe)."""
+        with self._lock:
+            self.total_requests += 1
+            self.successful_requests += 1
+            self.consecutive_failures = 0
+            self.last_success_time = datetime.now(timezone.utc)
+            
+            # Update rolling average latency
+            if self.avg_latency_ms == 0:
+                self.avg_latency_ms = latency_ms
+            else:
+                # Exponential moving average
+                self.avg_latency_ms = 0.9 * self.avg_latency_ms + 0.1 * latency_ms
+            
+            # Recalculate health score
+            self._recalculate_score_unlocked()
     
     def update_failure(self, error: str, category: TimeoutCategory) -> None:
-        """Update metrics after failed request."""
-        self.total_requests += 1
-        self.failed_requests += 1
-        self.consecutive_failures += 1
-        self.last_failure_time = datetime.now(timezone.utc)
-        self.last_error = error
-        
-        # Handle rate limiting
-        if category == TimeoutCategory.RATE_LIMITED:
-            self.is_rate_limited = True
-            # Set cooldown period with exponential backoff
-            cooldown_seconds = min(60 * (2 ** min(self.consecutive_failures, 5)), 3600)
-            self.rate_limit_reset_time = datetime.now(timezone.utc) + timedelta(seconds=cooldown_seconds)
-        
-        # Set cooldown for other failures
-        if category != TimeoutCategory.RATE_LIMITED:
-            cooldown_seconds = min(5 * (2 ** min(self.consecutive_failures - 1, 6)), 300)
-            self.cooldown_until = datetime.now(timezone.utc) + timedelta(seconds=cooldown_seconds)
-        
-        # Recalculate health score
-        self._recalculate_score()
+        """Update metrics after failed request (thread-safe)."""
+        with self._lock:
+            self.total_requests += 1
+            self.failed_requests += 1
+            self.consecutive_failures += 1
+            self.last_failure_time = datetime.now(timezone.utc)
+            self.last_error = error
+            
+            # Handle rate limiting
+            if category == TimeoutCategory.RATE_LIMITED:
+                self.is_rate_limited = True
+                # Set cooldown period with exponential backoff
+                cooldown_seconds = min(60 * (2 ** min(self.consecutive_failures, 5)), 3600)
+                self.rate_limit_reset_time = datetime.now(timezone.utc) + timedelta(seconds=cooldown_seconds)
+            
+            # Set cooldown for other failures
+            if category != TimeoutCategory.RATE_LIMITED:
+                cooldown_seconds = min(5 * (2 ** min(self.consecutive_failures - 1, 6)), 300)
+                self.cooldown_until = datetime.now(timezone.utc) + timedelta(seconds=cooldown_seconds)
+            
+            # Recalculate health score
+            self._recalculate_score_unlocked()
     
-    def _recalculate_score(self) -> None:
-        """Recalculate health score based on metrics."""
+    def _recalculate_score_unlocked(self) -> None:
+        """Recalculate health score (must be called with lock held)."""
         if self.total_requests == 0:
             self.health_score = 100.0
             self.status = ProviderStatus.HEALTHY
@@ -191,13 +201,25 @@ class RPCManagerConfig:
     
     # Health check
     health_check_interval_seconds: int = 30
-    health_check_timeout_seconds: float = 5.0
     
     # Backoff configuration
     initial_backoff_ms: int = 100
     max_backoff_ms: int = 10000
     backoff_multiplier: float = 2.0
     jitter_factor: float = 0.1
+
+
+def _redact_url(url: str) -> str:
+    """Redact credentials and sensitive parts from RPC URL.
+    
+    Returns only hostname to avoid leaking API keys/tokens commonly embedded
+    in RPC URLs (e.g., Infura, Alchemy API keys in path).
+    """
+    try:
+        parsed = urlparse(url)
+        return parsed.hostname or "unknown"
+    except Exception:
+        return "***redacted***"
 
 
 # =============================================================================
@@ -405,6 +427,7 @@ class RPCManager:
         
         last_error: Optional[Exception] = None
         backoff_ms = self.config.initial_backoff_ms
+        any_provider_attempted = False
         
         for attempt in range(self.config.max_failover_attempts):
             for provider in providers:
@@ -413,6 +436,8 @@ class RPCManager:
                 
                 if health and not health.is_available():
                     continue
+                
+                any_provider_attempted = True
                 
                 try:
                     web3 = self._get_web3_for_provider(provider)
@@ -452,6 +477,29 @@ class RPCManager:
                             "category": category.value
                         }
                     )
+            
+            # If no providers were attempted (all in cooldown), try the best one anyway
+            if not any_provider_attempted and providers:
+                logger.warning(
+                    f"All providers for chain {chain_id} in cooldown, attempting best available"
+                )
+                provider = providers[0]  # Already sorted by priority/health
+                try:
+                    web3 = self._get_web3_for_provider(provider)
+                    start_time = time.time()
+                    result = operation(web3)
+                    latency_ms = (time.time() - start_time) * 1000
+                    
+                    # Update health on success (with measured latency)
+                    key = self._get_provider_key(chain_id, provider.name)
+                    health = self._health.get(key)
+                    if health:
+                        health.update_success(latency_ms)
+                    
+                    return result
+                except Exception as e:
+                    last_error = e
+                    logger.error(f"Emergency fallback to {provider.name} also failed: {e}")
             
             # Backoff before retry
             if attempt < self.config.max_failover_attempts - 1:
@@ -522,7 +570,7 @@ class RPCManager:
             chain_id: Chain ID
             
         Returns:
-            Status dictionary with provider health info
+            Status dictionary with provider health info (URLs are redacted)
         """
         with self._lock:
             providers = self._providers.get(chain_id, [])
@@ -538,7 +586,7 @@ class RPCManager:
                 
                 provider_status = {
                     "name": p.name,
-                    "url": p.url[:50] + "..." if len(p.url) > 50 else p.url,
+                    "url_host": _redact_url(p.url),
                     "is_primary": p.is_primary,
                     "priority": p.priority,
                 }

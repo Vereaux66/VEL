@@ -331,22 +331,27 @@ class NonceManager:
         wallet_address = wallet_address.lower()
         key = (chain_id, wallet_address)
         
-        # Try to use distributed locking for cross-process safety
+        # Try to use distributed locking for cross-process nonce safety.
+        # Note: DistributedLockManager without Redis uses in-memory locks,
+        # providing thread safety but NOT cross-process safety. For true
+        # cross-process nonce safety, configure Redis in DistributedLockManager.
         lock_context = None
+        lock_acquired = False
         try:
             from vel_distributed_locks import DistributedLockManager, LockType
             lock_manager = DistributedLockManager()
             resource_id = f"{chain_id}:{wallet_address}"
             lock_context = lock_manager.lock(LockType.NONCE, resource_id)
-        except (ImportError, Exception) as e:
-            # Fall back to thread-local locking
-            logger.debug(f"Distributed locks not available, using local lock: {e}")
+        except ImportError:
+            # Fall back to thread-local locking when module not available
+            logger.debug("Distributed locks module not available, using local lock")
             lock_context = None
         
         try:
             # Enter distributed lock context if available
             if lock_context:
                 lock_context.__enter__()
+                lock_acquired = True
             
             with self._lock:
                 # Get current nonce from state or chain
@@ -372,8 +377,8 @@ class NonceManager:
                 logger.debug(f"Allocated nonce {nonce} for wallet {wallet_address} on chain {chain_id}")
                 return nonce
         finally:
-            # Exit distributed lock context
-            if lock_context:
+            # Exit distributed lock context only if we successfully entered it
+            if lock_context and lock_acquired:
                 try:
                     lock_context.__exit__(None, None, None)
                 except Exception:

@@ -9,7 +9,6 @@ Run with: python -m pytest tests/test_config_validator.py -v
 """
 
 import json
-import os
 import sys
 import tempfile
 import unittest

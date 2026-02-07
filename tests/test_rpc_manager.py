@@ -9,11 +9,8 @@ Run with: python -m pytest tests/test_rpc_manager.py -v
 """
 
 import sys
-import time
-import threading
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock, patch, PropertyMock
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
