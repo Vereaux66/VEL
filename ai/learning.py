@@ -57,19 +57,15 @@ import pandas as pd
 from numpy.typing import NDArray
 
 # scikit-learn - REQUIRED for learning algorithms
-from sklearn.ensemble import IsolationForest
-from sklearn.exceptions import NotFittedError
 from sklearn.linear_model import SGDRegressor
 from sklearn.preprocessing import StandardScaler
 
 SKLEARN_AVAILABLE = True
 
-# PyTorch - REQUIRED for RL agents
+# PyTorch - REQUIRED for RL agents (imports used in ReinforcementLearningAgent classes)
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import torch.optim as optim
-from torch.distributions import Categorical, Normal
 
 TORCH_AVAILABLE = True
 

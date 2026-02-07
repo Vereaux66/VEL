@@ -641,19 +641,21 @@ class OrchestrationManifest:
     # ══════════════════════════════════════════════════════════════
 
     def _init_brain(self) -> Any:
-        """Initialize AI core (using consolidated ai.core module)."""
+        """Initialize AI core (using consolidated ai.core module).
+        
+        ai.core is REQUIRED - no fallback to legacy modules.
+        """
         try:
             from ai.core import AISupervisor
             event_bus = self.components.get("event_bus")
             return AISupervisor(event_bus=event_bus)
-        except ImportError:
-            # Fallback to legacy brain if ai.core not available
-            try:
-                from anvel_brain import AnvelBrain
-                return AnvelBrain()
-            except Exception as e:
-                logger.warning(f"Brain init: {e}")
-                return None
+        except ImportError as e:
+            logger.error(f"REQUIRED ai.core module not available: {e}")
+            logger.error("Install AI dependencies: pip install -r requirements.txt")
+            raise ImportError(
+                "ai.core is required for VEL operation. "
+                "Ensure all dependencies are installed."
+            ) from e
         except Exception as e:
             logger.warning(f"AI Supervisor init: {e}")
             return None

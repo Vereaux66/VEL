@@ -285,9 +285,20 @@ class RuntimeBoot:
     
     def _handle_heartbeat_request(self, payload: dict) -> dict:
         """Handle heartbeat request from event bus."""
-        if hasattr(self, 'heartbeat_monitor') and hasattr(self.heartbeat_monitor, 'get_status'):
-            return self.heartbeat_monitor.get_status()
-        return {"status": "ok"}
+        # Try to get actual health status from the health server
+        if hasattr(self, 'heartbeat_monitor'):
+            # Try HealthServer methods for actual health data
+            if hasattr(self.heartbeat_monitor, 'get_health_status'):
+                return self.heartbeat_monitor.get_health_status()
+            elif hasattr(self.heartbeat_monitor, 'check_health'):
+                return self.heartbeat_monitor.check_health()
+        
+        # Fallback: build status from service registry
+        return {
+            "status": "ok" if all(s == "running" for s in self._service_status.values()) else "degraded",
+            "services": dict(self._service_status),
+            "timestamp": __import__('time').time()
+        }
     
     def _init_heartbeat_monitor(self) -> bool:
         """Initialize heartbeat monitor."""

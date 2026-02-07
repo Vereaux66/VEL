@@ -70,8 +70,16 @@ jobs:
       - name: Enforce DEX-only policy (no CEX modules)
         run: |
           # Check for CEX broker files (should not exist in main codebase)
-          if ls anvel_broker_coinbase.py anvel_broker_kraken.py 2>/dev/null; then
-            echo "ERROR: CEX broker files detected in main codebase!"
+          CEX_FILES_FOUND=0
+          if test -f anvel_broker_coinbase.py; then
+            echo "ERROR: anvel_broker_coinbase.py found in main codebase!"
+            CEX_FILES_FOUND=1
+          fi
+          if test -f anvel_broker_kraken.py; then
+            echo "ERROR: anvel_broker_kraken.py found in main codebase!"
+            CEX_FILES_FOUND=1
+          fi
+          if [ "$CEX_FILES_FOUND" -eq 1 ]; then
             echo "VEL enforces DEX-only trading. CEX modules must remain archived."
             exit 1
           fi

@@ -543,6 +543,10 @@ class AdvancedPositionSizer:
         Returns:
             Risk amount in dollars
         """
+        # Guard against division by zero
+        if entry_price <= 0:
+            return Decimal("0")
+        
         risk_per_unit = abs(entry_price - stop_price) / entry_price
         return position_size * risk_per_unit
     
@@ -561,6 +565,10 @@ class AdvancedPositionSizer:
         Returns:
             (is_valid, rejection_reason)
         """
+        # Guard against division by zero
+        if portfolio_value <= 0:
+            return False, "Invalid portfolio value: must be positive"
+        
         position_pct = position_size / portfolio_value
         
         if position_pct > self.MAX_POSITION_PCT:
