@@ -276,10 +276,27 @@ class NonceManager:
             logger.warning(f"Marked {updated} transactions as dropped")
     
     def _get_web3(self, chain_id: int) -> Optional[Web3]:
-        """Get Web3 connection for chain."""
+        """Get Web3 connection for chain.
+        
+        Uses RPC manager if available for better failover and health tracking,
+        otherwise falls back to direct connection.
+        """
         if chain_id in self._web3_connections:
             return self._web3_connections[chain_id]
         
+        # Try using RPC manager first (recommended for production)
+        try:
+            from vel_rpc_manager import get_rpc_manager
+            rpc_manager = get_rpc_manager()
+            w3 = rpc_manager.get_web3(chain_id)
+            if w3 and w3.is_connected():
+                self._web3_connections[chain_id] = w3
+                logger.debug(f"Using RPC manager for chain {chain_id}")
+                return w3
+        except (ImportError, RuntimeError) as e:
+            logger.debug(f"RPC manager not available, using direct connection: {e}")
+        
+        # Fallback to direct connection
         if chain_id not in SUPPORTED_CHAINS:
             return None
         
@@ -298,39 +315,69 @@ class NonceManager:
         """
         Get next available nonce for wallet on chain.
         
+        Uses distributed locking when available to prevent race conditions
+        across multiple processes.
+        
         Args:
             chain_id: Blockchain chain ID
             wallet_address: Wallet address
             
         Returns:
             Next nonce to use
+            
+        Raises:
+            RuntimeError: If unable to acquire lock or connect to chain
         """
         wallet_address = wallet_address.lower()
         key = (chain_id, wallet_address)
         
-        with self._lock:
-            # Get current nonce from state or chain
-            if key in self._nonce_state:
-                nonce = self._nonce_state[key]
-            else:
-                # First time - query chain
-                w3 = self._get_web3(chain_id)
-                if not w3:
-                    raise RuntimeError(f"Cannot connect to chain {chain_id}")
+        # Try to use distributed locking for cross-process safety
+        lock_context = None
+        try:
+            from vel_distributed_locks import DistributedLockManager, LockType
+            lock_manager = DistributedLockManager()
+            resource_id = f"{chain_id}:{wallet_address}"
+            lock_context = lock_manager.lock(LockType.NONCE, resource_id)
+        except (ImportError, Exception) as e:
+            # Fall back to thread-local locking
+            logger.debug(f"Distributed locks not available, using local lock: {e}")
+            lock_context = None
+        
+        try:
+            # Enter distributed lock context if available
+            if lock_context:
+                lock_context.__enter__()
+            
+            with self._lock:
+                # Get current nonce from state or chain
+                if key in self._nonce_state:
+                    nonce = self._nonce_state[key]
+                else:
+                    # First time - query chain
+                    w3 = self._get_web3(chain_id)
+                    if not w3:
+                        raise RuntimeError(f"Cannot connect to chain {chain_id}")
+                    
+                    nonce = w3.eth.get_transaction_count(Web3.to_checksum_address(wallet_address))
+                    self._nonce_state[key] = nonce
                 
-                nonce = w3.eth.get_transaction_count(Web3.to_checksum_address(wallet_address))
-                self._nonce_state[key] = nonce
-            
-            # Track as pending
-            if key not in self._pending_nonces:
-                self._pending_nonces[key] = set()
-            self._pending_nonces[key].add(nonce)
-            
-            # Increment for next call
-            self._nonce_state[key] = nonce + 1
-            
-            logger.debug(f"Allocated nonce {nonce} for wallet {wallet_address} on chain {chain_id}")
-            return nonce
+                # Track as pending
+                if key not in self._pending_nonces:
+                    self._pending_nonces[key] = set()
+                self._pending_nonces[key].add(nonce)
+                
+                # Increment for next call
+                self._nonce_state[key] = nonce + 1
+                
+                logger.debug(f"Allocated nonce {nonce} for wallet {wallet_address} on chain {chain_id}")
+                return nonce
+        finally:
+            # Exit distributed lock context
+            if lock_context:
+                try:
+                    lock_context.__exit__(None, None, None)
+                except Exception:
+                    pass
     
     def journal_transaction(self, entry: TransactionJournalEntry) -> bool:
         """
