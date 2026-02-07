@@ -24,7 +24,7 @@ import random
 import threading
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, TypeVar
 
@@ -113,14 +113,13 @@ class ProviderHealth:
         # Handle rate limiting
         if category == TimeoutCategory.RATE_LIMITED:
             self.is_rate_limited = True
-            # Set cooldown period
+            # Set cooldown period with exponential backoff
             cooldown_seconds = min(60 * (2 ** min(self.consecutive_failures, 5)), 3600)
-            self.rate_limit_reset_time = datetime.now(timezone.utc)
+            self.rate_limit_reset_time = datetime.now(timezone.utc) + timedelta(seconds=cooldown_seconds)
         
         # Set cooldown for other failures
         if category != TimeoutCategory.RATE_LIMITED:
             cooldown_seconds = min(5 * (2 ** min(self.consecutive_failures - 1, 6)), 300)
-            from datetime import timedelta
             self.cooldown_until = datetime.now(timezone.utc) + timedelta(seconds=cooldown_seconds)
         
         # Recalculate health score
@@ -168,8 +167,7 @@ class ProviderHealth:
         
         # Check rate limit
         if self.is_rate_limited and self.rate_limit_reset_time:
-            from datetime import timedelta
-            if now < self.rate_limit_reset_time + timedelta(seconds=60):
+            if now < self.rate_limit_reset_time:
                 return False
             self.is_rate_limited = False
         
@@ -177,7 +175,6 @@ class ProviderHealth:
         if self.status == ProviderStatus.OFFLINE:
             # Allow retry after 5 minutes
             if self.last_failure_time:
-                from datetime import timedelta
                 if now > self.last_failure_time + timedelta(minutes=5):
                     return True
             return False
