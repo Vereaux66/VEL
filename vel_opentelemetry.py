@@ -38,21 +38,16 @@ from typing import Any, Callable, Dict, Optional
 
 logger = logging.getLogger("vel.tracing")
 
-# Try to import OpenTelemetry
-try:
-    from opentelemetry import trace
-    from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import BatchSpanProcessor
-    from opentelemetry.sdk.resources import Resource, SERVICE_NAME
-    from opentelemetry.trace import Status, StatusCode
-    from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
-    from opentelemetry.propagate import set_global_textmap, inject, extract
-    
-    # Exporters (conditional imports)
-    OTEL_AVAILABLE = True
-except ImportError:
-    OTEL_AVAILABLE = False
-    logger.warning("OpenTelemetry not available. Install with: pip install opentelemetry-api opentelemetry-sdk")
+# OpenTelemetry imports - REQUIRED dependency
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.sdk.resources import Resource, SERVICE_NAME
+from opentelemetry.trace import Status, StatusCode
+from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
+from opentelemetry.propagate import set_global_textmap, inject, extract
+
+OTEL_AVAILABLE = True
 
 
 # =============================================================================
