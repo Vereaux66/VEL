@@ -1,26 +1,59 @@
-# VEL - Autonomous DeFi Trading Platform
+# VEL - Enterprise DeFi Trading Platform
 
-A production-ready decentralized trading system with AI-powered strategies and multi-chain support.
+[![CI/CD Pipeline](https://github.com/Vereaux66/VEL/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/Vereaux66/VEL/actions)
+[![Security](https://img.shields.io/badge/security-military--grade-green.svg)](SECURITY.md)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-## Quick Start - Single Launch Authority
+A production-ready, enterprise-grade decentralized trading system with AI-powered strategies, military-grade security, and multi-chain support. Designed for 100,000+ user scalability.
+
+## 🌟 Features
+
+### Trading Engine
+- **DEX-Only Execution**: All trades executed on-chain through smart contracts
+- **Multi-Chain Support**: Ethereum, Arbitrum, Optimism, Polygon, BSC, Base
+- **Slippage Protection**: Configurable tolerance with MEV resistance
+- **Batch Trading**: Execute multiple swaps in a single transaction
+- **Risk Kernel**: Real-time risk validation gate for all trades
+
+### AI/ML Capabilities
+- **Predictive Analytics**: Market regime detection and price prediction
+- **Self-Healing**: Autonomous system repair and recovery
+- **Continuous Learning**: Encrypted knowledge transfer between components
+- **Strategy Optimization**: ML-powered trading strategy adaptation
+
+### Security
+- **Military-Grade Encryption**: AES-256-GCM with PBKDF2 key derivation
+- **Intrusion Detection**: Real-time threat analysis and response
+- **Rate Limiting**: Configurable burst protection
+- **Session Management**: Fingerprint-based hijacking detection
+- **Smart Contract Security**: ReentrancyGuard, Pausable, SafeERC20
+
+### Infrastructure
+- **Kubernetes-Ready**: Helm charts for EKS deployment
+- **Auto-Scaling**: 6-24 pod scaling for production
+- **Observability**: OpenTelemetry, Prometheus, Grafana integration
+- **Circuit Breakers**: Automatic halt on anomalies
+
+## 🚀 Quick Start
+
+### Prerequisites
+- Python 3.10+
+- Node.js 18+
+- PostgreSQL 16+
+- Redis 7+
+
+### Single Launch Authority
 
 **All deployments use a single entry point:**
 
 ```bash
 # Set required environment variable
+export ANVEL_MASTER_KEY=$(python3 -c 'import secrets; print(secrets.token_hex(32))')
 export ANVEL_WEB_PASSWORD="your_secure_password_here"
 
-# Launch the system (setup + full boot)
+# Launch the system
 python run.py
 ```
-
-This unified launcher enforces:
-- ✓ Mandatory preflight validation (hard fail on missing requirements)
-- ✓ Deterministic service initialization order
-- ✓ Execution spine verification
-- ✓ Circuit breaker activation
-- ✓ Persistence continuity checks
-- ✓ Same boot sequence for all deployment modes
 
 ### Launch Options
 
@@ -32,9 +65,9 @@ python run.py --validate-only
 python run.py --help
 ```
 
-## Boot Sequence (Deterministic Order)
+## 📋 Boot Sequence
 
-The system always initializes in this exact order:
+The system initializes in this exact deterministic order:
 
 | Phase | Component | Status |
 |-------|-----------|--------|
@@ -50,110 +83,185 @@ The system always initializes in this exact order:
 
 **If any required phase fails, the system refuses to start.**
 
-## Environment Variables
+## ⚙️ Configuration
 
-### Required
+### Required Environment Variables
 ```bash
-ANVEL_WEB_PASSWORD=<min 12 characters>  # Required for all deployments
+ANVEL_MASTER_KEY=<64-character hex string>  # REQUIRED - encryption key
+ANVEL_WEB_PASSWORD=<min 12 characters>       # REQUIRED - web auth
 ```
 
-### Optional
+### Optional Configuration
 ```bash
+# Database
 ANVEL_DB_HOST=localhost
 ANVEL_DB_PORT=5432
 ANVEL_DB_NAME=vel
 ANVEL_DB_USER=vel
 ANVEL_DB_PASSWORD=<password>
+
+# Redis
 ANVEL_REDIS_URL=redis://localhost:6379/0
+
+# Trading Mode
 ANVEL_MODE=demo|paper|live
 ```
 
-## Deployment Consistency
-
-All deployment modes use identical configuration:
-
-### Local Development
-```bash
-export ANVEL_WEB_PASSWORD="your_password"
-python run.py
-```
-
-### Docker
-```dockerfile
-# In docker-compose.yml, the entrypoint must be:
-command: ["python", "run.py"]
-```
-
-### AWS / Cloud
-```yaml
-# In task definition / deployment config:
-entrypoint: ["python", "run.py"]
-```
-
-## Execution Spine
-
-Every trade passes through the complete chain:
-
-```
-Market Data → Signal Engine → Risk Validation → Execution Manager → Ledger Write → Monitoring
-```
-
-The launcher verifies this chain is connected before marking the system operational.
-
-## Circuit Breakers
-
-Circuit breakers are wired to the execution stage and can:
-- Halt all trading immediately
-- Stop order broadcast
-- Log halt reason with timestamp
-- Notify monitoring systems
-
-## Persistence Guarantees
-
-The system ensures:
-- Nonce/order state persists after restart
-- Open trade states are recoverable
-- Execution logs are stored in `data/state/`
-
-## System Requirements
-
-| Component | Minimum |
-|-----------|---------|
-| Python | 3.10+ |
-| Memory | 4GB RAM |
-| Storage | 2GB free |
-
-## Project Structure
+## 📁 Project Structure
 
 ```
 VEL/
 ├── run.py                    # SINGLE LAUNCH AUTHORITY
-├── config/                   # Configuration files
-├── data/state/               # Persistent state storage
-├── logs/                     # Execution logs
+├── README.md                 # This file
+├── SECURITY.md               # Security documentation
+├── CONTRIBUTING.md           # Contribution guidelines
 │
-├── Core Components
-│   ├── anvel_event_bus.py    # Central messaging
-│   ├── vel_risk_kernel.py    # Risk validation gate
-│   ├── anvel_circuit_breaker.py
-│   └── anvel_trade_engine.py
+├── contracts/                # Smart Contracts
+│   ├── VELTradeExecutor.sol  # Main trading contract
+│   ├── hardhat.config.js     # Hardhat configuration
+│   └── scripts/deploy.js     # Deployment script
 │
-└── Documentation
-    ├── TRADING_SYSTEM_README.md
-    ├── SECURITY.md
-    └── CONTRIBUTING.md
+├── frontend/                 # React Frontend
+│   ├── src/
+│   │   ├── components/       # Reusable components
+│   │   ├── pages/            # Page components
+│   │   ├── context/          # React context providers
+│   │   └── utils/            # Utility functions
+│   └── package.json
+│
+├── ai/                       # AI/ML Modules
+│   ├── core.py               # AI supervisor and training
+│   ├── introspection.py      # System introspection
+│   ├── learning.py           # Continuous learning
+│   └── self_repair.py        # Self-healing capabilities
+│
+├── runtime/                  # Runtime Components
+│   ├── boot.py               # Boot sequence
+│   ├── config_loader.py      # Configuration loading
+│   ├── health.py             # Health checks
+│   └── service_registry.py   # Service registration
+│
+├── config/                   # Configuration Files
+│   ├── system.json           # System configuration
+│   ├── trading.json          # Trading parameters
+│   ├── networks.json         # Blockchain networks
+│   └── ai.json               # AI configuration
+│
+├── tests/                    # Test Suite
+│   ├── test_security.py      # Security tests (30 tests)
+│   ├── test_config_validator.py
+│   ├── test_rpc_manager.py
+│   └── test_trade_lifecycle.py
+│
+├── .github/
+│   └── workflows/
+│       └── ci-cd.yml         # CI/CD pipeline
+│
+└── VEL_ARC/                  # Archive (deprecated code)
+    ├── docs_archive/         # Archived documentation
+    ├── legacy_pdfs/          # Archived PDFs
+    └── cex_brokers/          # Archived CEX modules
 ```
 
-## Additional Documentation
+## 🔐 Security
 
-- [Trading System Details](TRADING_SYSTEM_README.md)
-- [Security Guidelines](SECURITY.md)
-- [Contributing Guide](CONTRIBUTING.md)
+### Smart Contract Security
+- ReentrancyGuard protection
+- Emergency pause capability
+- Router/token whitelisting
+- Slippage bounds enforcement
+- Deadline validation
 
-## License
+### Backend Security
+- AES-256-GCM encryption
+- PBKDF2 key derivation (100k iterations)
+- HMAC-SHA512 integrity verification
+- Session fingerprinting
+- Rate limiting with burst protection
+- SQL injection protection
+- XSS prevention
+- Path traversal detection
 
-MIT License
+See [SECURITY.md](SECURITY.md) for full details.
 
-## Disclaimer
+## 🧪 Testing
 
-This software is for educational purposes. Trading cryptocurrencies involves substantial risk. Never invest more than you can afford to lose.
+```bash
+# Run all tests
+ANVEL_MASTER_KEY=$(python3 -c 'import secrets; print(secrets.token_hex(32))') \
+python -m pytest tests/ -v
+
+# Run specific test suite
+python -m pytest tests/test_security.py -v
+
+# Run with coverage
+python -m pytest tests/ --cov=. --cov-report=html
+```
+
+## 📊 API Endpoints
+
+### Health & Status
+```
+GET  /health              # System health check
+GET  /api/status          # Trading system status
+```
+
+### Trading
+```
+POST /api/trade/execute   # Execute trade
+GET  /api/trade/history   # Trade history
+GET  /api/positions       # Current positions
+```
+
+### Portfolio
+```
+GET  /api/portfolio       # Portfolio overview
+GET  /api/performance     # Performance metrics
+```
+
+## 🚢 Deployment
+
+### Docker
+```bash
+docker-compose up -d
+```
+
+### Kubernetes (EKS)
+```bash
+helm upgrade --install vel-trading ./aws/helm/vel \
+  --namespace vel-system \
+  --create-namespace \
+  --set global.environment=production
+```
+
+### AWS CodeDeploy
+The system includes AWS CodeDeploy integration via `appspec.yml`.
+
+## 📈 Monitoring
+
+### Prometheus Metrics
+- Trade execution latency
+- Risk check pass/fail rates
+- Circuit breaker status
+- System resource usage
+
+### Logging
+- Structured JSON logging
+- Correlation IDs for request tracing
+- OpenTelemetry integration
+
+## 🤝 Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
+
+## 📜 License
+
+MIT License - see LICENSE file for details.
+
+## ⚠️ Disclaimer
+
+This software is for educational and research purposes. Trading cryptocurrencies involves substantial risk of loss. Never invest more than you can afford to lose. The authors are not responsible for any financial losses incurred through the use of this software.
+
+---
+
+**Built with ❤️ for the DeFi community**
