@@ -3,8 +3,10 @@
 # ANVEL Trading System - Python Dependencies
 # Complete requirements for all modules
 
-# Core Dependencies (pandas/numpy removed; Rust analytics replaces them)
-# Note: pin to 1.14+ to keep Python 3.12 wheels available.
+# Core Dependencies
+# Note: numpy and pandas are REQUIRED for AI/ML modules and data processing
+numpy==2.2.0
+pandas==2.2.0
 scipy==1.17.0
 
 # Machine Learning & AI
@@ -178,3 +180,9 @@ jupyter==1.1.1
 black==26.1.0
 pylint==2.17.5
 mypy==1.4.1
+
+# OpenTelemetry (REQUIRED for observability)
+opentelemetry-api==1.25.0
+opentelemetry-sdk==1.25.0
+opentelemetry-exporter-otlp==1.25.0
+opentelemetry-instrumentation==0.46b0

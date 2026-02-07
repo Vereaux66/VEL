@@ -289,7 +289,16 @@ import json
 import pickle
 from datetime import datetime
 import warnings
-from anvel_brain_modules import BrainSubsystems
+
+# Use consolidated AI core for BrainSubsystems
+try:
+    from ai.core import BrainSubsystems
+except ImportError:
+    # Fallback for backwards compatibility - define minimal stub
+    class BrainSubsystems:  # pragma: no cover
+        """Minimal BrainSubsystems stub for backwards compatibility."""
+        def get_snapshot(self):
+            return {"stub": True, "message": "ai.core not available"}
 
 warnings.filterwarnings("ignore")
 logger = logging.getLogger(__name__)

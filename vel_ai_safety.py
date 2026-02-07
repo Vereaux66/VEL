@@ -42,6 +42,8 @@ from decimal import Decimal
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional
 
+import numpy as np
+
 logger = logging.getLogger("vel.ai.safety")
 
 
@@ -159,14 +161,9 @@ class DeterministicContext:
         self._original_random_state = random.getstate()
         random.seed(self.seed)
         
-        # Try to set numpy seed if available
-        try:
-            import numpy as np
-            self._original_numpy_state = np.random.get_state()
-            np.random.seed(self.seed)
-        except ImportError:
-            # numpy is an optional dependency; if not available, skip numpy RNG seeding
-            pass
+        # Set numpy seed
+        self._original_numpy_state = np.random.get_state()
+        np.random.seed(self.seed)
         
         return self
     
@@ -177,12 +174,7 @@ class DeterministicContext:
         
         # Restore numpy state
         if self._original_numpy_state is not None:
-            try:
-                import numpy as np
-                np.random.set_state(self._original_numpy_state)
-            except ImportError:
-                # numpy is an optional dependency; if not available, skip restore
-                pass
+            np.random.set_state(self._original_numpy_state)
         
         return False
     

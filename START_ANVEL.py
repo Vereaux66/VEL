@@ -1,20 +1,23 @@
 #!/usr/bin/env python3
 """
-UNIFIED ANVEL STARTUP SCRIPT
-============================
-Single entry point for all ANVEL startup operations.
+VEL UNIFIED STARTUP SCRIPT
+===========================
+Single entry point for all VEL trading system startup operations.
 
 Primary boot path uses the OrchestrationManifest for deterministic,
 phase-gated startup with safety kernel loaded before execution.
 
-Falls back to ANVEL_MASTER.py legacy boot if manifest is unavailable.
+LEGACY NOTE: The --legacy flag falls back to ANVEL_MASTER.py which is
+deprecated. New deployments should use the default OrchestrationManifest path.
 
 Usage:
-    python START_ANVEL.py              # Deterministic boot (default)
-    python START_ANVEL.py --legacy     # Legacy ANVEL_MASTER boot
+    python START_ANVEL.py              # Deterministic boot (default, recommended)
+    python START_ANVEL.py --legacy     # DEPRECATED: Legacy ANVEL_MASTER boot
     python START_ANVEL.py --monitor    # Runtime monitoring only
     python START_ANVEL.py --skip-validation  # Skip pre-boot validation
     python START_ANVEL.py --help       # Show help
+
+For production deployments, use the default (no flags) for deterministic behavior.
 """
 
 import logging
@@ -83,11 +86,10 @@ class PreBootValidator:
                 if not os.environ.get(var):
                     self.errors.append(f"Missing required environment variable: {var}")
             
-            # Warn about sensitive variables that should be set
+            # VEL is DEX-only - no CEX API keys needed
+            # Price discovery uses on-chain data from DEX pools or oracles
             sensitive_vars = [
                 "ANVEL_WALLET_PRIVATE_KEY",
-                "ANVEL_KRAKEN_API_KEY",
-                "ANVEL_COINBASE_API_KEY",
             ]
             
             for var in sensitive_vars:
@@ -296,7 +298,16 @@ def launch_orchestrated():
 
 
 def launch_legacy():
-    """Launch ANVEL system via legacy ANVEL_MASTER"""
+    """Launch ANVEL system via legacy ANVEL_MASTER.
+    
+    DEPRECATED: This legacy boot path is maintained for backward compatibility
+    but should not be used in new deployments. Use the default OrchestrationManifest
+    boot path instead for deterministic behavior.
+    """
+    logger.warning("=" * 50)
+    logger.warning("DEPRECATION WARNING: Legacy boot is deprecated")
+    logger.warning("Use the default boot path for production deployments")
+    logger.warning("=" * 50)
     try:
         from ANVEL_MASTER import main as master_main
         master_main()

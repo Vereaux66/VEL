@@ -4,14 +4,17 @@ Unified Broker Factory
 ======================
 Single entry point for creating broker instances.
 VEL is DEX-only — all trade execution goes through DEX brokers.
-Market data adapters (Coinbase, Kraken) are read-only price feeds.
+
+CEX POLICY: Centralized exchange integrations have been removed to enforce
+DEX-only trading. Price data should be obtained from on-chain oracles or
+DEX pools directly.
 """
 
 from __future__ import annotations
 
 import logging
 from decimal import Decimal
-from typing import Any, Dict, Optional
+from typing import Any, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -20,8 +23,9 @@ class BrokerFactory:
     """Unified broker factory for VEL.
 
     Trade execution is DEX-only. ``create_dex`` is the primary method.
-    ``create_data_feed`` provides read-only market data adapters for
-    price discovery and strategy signals.
+
+    CEX POLICY: Centralized exchange integrations have been removed.
+    Price discovery should use on-chain data from DEX pools or oracles.
     """
 
     # ------------------------------------------------------------------
@@ -76,33 +80,33 @@ class BrokerFactory:
             raise
 
     # ------------------------------------------------------------------
-    # Data-feed adapters (read-only, for price discovery)
+    # CEX data feeds removed - Use DEX/on-chain price discovery
     # ------------------------------------------------------------------
 
     @staticmethod
     def create_data_feed(source: str, **kwargs: Any) -> Any:
-        """Create a read-only market data adapter.
+        """DEPRECATED: CEX data feeds have been removed.
 
-        Parameters
-        ----------
-        source:
-            ``"coinbase"`` or ``"kraken"``.
+        VEL enforces DEX-only trading. Price discovery should use on-chain
+        data from DEX pools or decentralized oracles (e.g., Chainlink).
+
+        Raises
+        ------
+        NotImplementedError
+            Always raised. CEX integrations are no longer supported.
         """
-        source_lower = source.lower()
-        if source_lower == "coinbase":
-            from anvel_broker_coinbase import CoinbaseBroker
-            return CoinbaseBroker(**kwargs)
-        if source_lower == "kraken":
-            from anvel_broker_kraken import KrakenBroker
-            return KrakenBroker(**kwargs)
-        raise ValueError(f"Unknown data feed source: {source}")
+        raise NotImplementedError(
+            f"CEX data feed '{source}' is no longer supported. "
+            "VEL enforces DEX-only trading. Use on-chain price discovery "
+            "from DEX pools or decentralized oracles instead."
+        )
 
     # ------------------------------------------------------------------
     # Convenience helpers
     # ------------------------------------------------------------------
 
     @staticmethod
-    def list_dexes(**kwargs: Any) -> Any:
+    def list_dexes(**kwargs: Any) -> List[str]:
         """Return available DEX identifiers."""
         try:
             from anvel_dex_broker_factory import list_available_dexes
@@ -111,7 +115,7 @@ class BrokerFactory:
             return []
 
     @staticmethod
-    def list_chains() -> Any:
+    def list_chains() -> List[int]:
         """Return available blockchain identifiers."""
         try:
             from anvel_dex_broker_factory import list_available_chains

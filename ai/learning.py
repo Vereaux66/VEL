@@ -56,31 +56,18 @@ import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
 
-# Optional sklearn for SGD-based learning
-try:
-    from sklearn.ensemble import IsolationForest
-    from sklearn.exceptions import NotFittedError
-    from sklearn.linear_model import SGDRegressor
-    from sklearn.preprocessing import StandardScaler
+# scikit-learn - REQUIRED for learning algorithms
+from sklearn.linear_model import SGDRegressor
+from sklearn.preprocessing import StandardScaler
 
-    SKLEARN_AVAILABLE = True
-except ImportError:
-    SKLEARN_AVAILABLE = False
-    SGDRegressor = None  # type: ignore
-    StandardScaler = None  # type: ignore
-    IsolationForest = None  # type: ignore
+SKLEARN_AVAILABLE = True
 
-# Optional PyTorch for RL agents
-try:
-    import torch
-    import torch.nn as nn
-    import torch.nn.functional as F
-    import torch.optim as optim
-    from torch.distributions import Categorical, Normal
+# PyTorch - REQUIRED for RL agents (imports used in ReinforcementLearningAgent classes)
+import torch
+import torch.nn as nn
+import torch.optim as optim
 
-    TORCH_AVAILABLE = True
-except ImportError:
-    TORCH_AVAILABLE = False
+TORCH_AVAILABLE = True
 
 # Optional analytics core
 try:

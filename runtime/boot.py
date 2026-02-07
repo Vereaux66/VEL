@@ -283,23 +283,38 @@ class RuntimeBoot:
             logger.error(f"  Network registry init error: {e}")
             return False
     
+    def _handle_heartbeat_request(self, payload: dict) -> dict:
+        """Handle heartbeat request from event bus."""
+        # Try to get actual health status from the health server
+        if hasattr(self, 'heartbeat_monitor'):
+            # Try HealthServer methods for actual health data
+            if hasattr(self.heartbeat_monitor, 'get_health_status'):
+                return self.heartbeat_monitor.get_health_status()
+            elif hasattr(self.heartbeat_monitor, 'check_health'):
+                return self.heartbeat_monitor.check_health()
+        
+        # Fallback: build status from service registry
+        return {
+            "status": "ok" if all(s == "running" for s in self._service_status.values()) else "degraded",
+            "services": dict(self._service_status),
+            "timestamp": __import__('time').time()
+        }
+    
     def _init_heartbeat_monitor(self) -> bool:
         """Initialize heartbeat monitor."""
         try:
-            from anvel_heartbeat_monitor import AnvelHeartbeatMonitor
+            # Use VEL health server for heartbeat monitoring
+            from vel_health_server import HealthServer
             
-            self.heartbeat_monitor = AnvelHeartbeatMonitor(
-                interval=self.config.heartbeat_interval
-            )
+            self.heartbeat_monitor = HealthServer()
             
             # Register to event bus
             if self.event_bus:
-                self.event_bus.subscribe("system.heartbeat_request",
-                    lambda p: self.heartbeat_monitor.get_status())
+                self.event_bus.subscribe("system.heartbeat_request", self._handle_heartbeat_request)
             
             # Start monitoring
-            if hasattr(self.heartbeat_monitor, 'startup'):
-                self.heartbeat_monitor.startup()
+            if hasattr(self.heartbeat_monitor, 'start'):
+                self.heartbeat_monitor.start()
             
             self._services["heartbeat_monitor"] = self.heartbeat_monitor
             self._service_status["heartbeat_monitor"] = "running"
@@ -307,6 +322,11 @@ class RuntimeBoot:
             logger.info(f"  Heartbeat monitor initialized (interval={self.config.heartbeat_interval}s)")
             return True
             
+        except ImportError:
+            # Fallback - heartbeat not critical
+            logger.warning("  Heartbeat monitor not available (vel_health_server not found)")
+            self._service_status["heartbeat_monitor"] = "unavailable"
+            return True
         except Exception as e:
             logger.error(f"  Heartbeat monitor init error: {e}")
             return False

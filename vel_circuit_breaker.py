@@ -377,3 +377,220 @@ class CircuitBreakerManager:
             self._metrics = HealthMetrics()
             self._recent_failures.clear()
             logger.warning("Health metrics reset")
+
+
+# =============================================================================
+# SERVICE-LEVEL CIRCUIT BREAKER (merged from anvel_circuit_breaker.py)
+# =============================================================================
+# Provides decorator and context manager patterns for protecting individual
+# service calls (e.g., RPC endpoints, external APIs).
+
+from enum import Enum as BaseEnum
+from collections import deque
+from typing import Callable, Any
+
+
+class ServiceCircuitState(BaseEnum):
+    """Circuit breaker states for service-level protection."""
+    CLOSED = "closed"      # Normal operation
+    OPEN = "open"          # Circuit tripped, blocking calls
+    HALF_OPEN = "half_open"  # Testing if service recovered
+
+
+class ServiceCircuitBreakerConfig:
+    """Configuration for service-level circuit breaker."""
+    
+    def __init__(
+        self,
+        failure_threshold: int = 5,
+        success_threshold: int = 2,
+        timeout: float = 60.0,
+        window_size: int = 100,
+        failure_rate_threshold: float = 0.5,
+        min_calls: int = 10
+    ):
+        self.failure_threshold = failure_threshold
+        self.success_threshold = success_threshold
+        self.timeout = timeout
+        self.window_size = window_size
+        self.failure_rate_threshold = failure_rate_threshold
+        self.min_calls = min_calls
+
+
+class ServiceCircuitBreakerOpenError(Exception):
+    """Raised when service circuit breaker is open."""
+    pass
+
+
+class ServiceCircuitBreaker:
+    """
+    Service-level circuit breaker for protecting individual service calls.
+    
+    Merged from anvel_circuit_breaker.py - provides decorator and context
+    manager patterns for protecting RPC calls, external APIs, etc.
+    
+    Usage:
+        breaker = ServiceCircuitBreaker("ethereum_rpc")
+        
+        @breaker.protected
+        def call_rpc():
+            return web3.eth.block_number
+        
+        # Or use context manager
+        with breaker:
+            result = web3.eth.block_number
+    """
+    
+    def __init__(
+        self,
+        name: str,
+        config: Optional[ServiceCircuitBreakerConfig] = None
+    ):
+        self.name = name
+        self.config = config or ServiceCircuitBreakerConfig()
+        self.state = ServiceCircuitState.CLOSED
+        
+        self._lock = threading.RLock()
+        self._failure_count = 0
+        self._success_count = 0
+        self._opened_at = 0.0
+        self._recent_calls: deque = deque(maxlen=self.config.window_size)
+        
+        # Metrics
+        self.total_calls = 0
+        self.successful_calls = 0
+        self.failed_calls = 0
+        self.rejected_calls = 0
+    
+    def call(self, func: Callable, *args, **kwargs) -> Any:
+        """
+        Execute function with circuit breaker protection.
+        
+        Raises:
+            ServiceCircuitBreakerOpenError: If circuit is open
+        """
+        with self._lock:
+            state = self._get_state()
+            if state == ServiceCircuitState.OPEN:
+                self.rejected_calls += 1
+                raise ServiceCircuitBreakerOpenError(
+                    f"Service circuit breaker '{self.name}' is OPEN"
+                )
+        
+        try:
+            result = func(*args, **kwargs)
+            self._on_success()
+            return result
+        except Exception:
+            self._on_failure()
+            raise
+    
+    def protected(self, func: Callable) -> Callable:
+        """Decorator to protect a function with circuit breaker."""
+        def wrapper(*args, **kwargs):
+            return self.call(func, *args, **kwargs)
+        return wrapper
+    
+    def __enter__(self):
+        """Context manager entry."""
+        with self._lock:
+            state = self._get_state()
+            if state == ServiceCircuitState.OPEN:
+                self.rejected_calls += 1
+                raise ServiceCircuitBreakerOpenError(
+                    f"Service circuit breaker '{self.name}' is OPEN"
+                )
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit."""
+        if exc_type is None:
+            self._on_success()
+        else:
+            self._on_failure()
+        return False
+    
+    def _get_state(self) -> ServiceCircuitState:
+        """Get current state, transitioning if necessary."""
+        import time
+        if self.state == ServiceCircuitState.OPEN:
+            if time.time() - self._opened_at >= self.config.timeout:
+                self._transition_to(ServiceCircuitState.HALF_OPEN)
+        return self.state
+    
+    def _on_success(self):
+        """Record successful call."""
+        import time
+        with self._lock:
+            self.total_calls += 1
+            self.successful_calls += 1
+            self._recent_calls.append(True)
+            
+            if self.state == ServiceCircuitState.HALF_OPEN:
+                self._success_count += 1
+                if self._success_count >= self.config.success_threshold:
+                    self._transition_to(ServiceCircuitState.CLOSED)
+            elif self.state == ServiceCircuitState.CLOSED:
+                self._failure_count = max(0, self._failure_count - 1)
+    
+    def _on_failure(self):
+        """Record failed call."""
+        import time
+        with self._lock:
+            self.total_calls += 1
+            self.failed_calls += 1
+            self._recent_calls.append(False)
+            self._failure_count += 1
+            
+            if self.state == ServiceCircuitState.HALF_OPEN:
+                self._transition_to(ServiceCircuitState.OPEN)
+            elif self.state == ServiceCircuitState.CLOSED:
+                if self._failure_count >= self.config.failure_threshold:
+                    self._transition_to(ServiceCircuitState.OPEN)
+                
+                if len(self._recent_calls) >= self.config.min_calls:
+                    failure_rate = self._calculate_failure_rate()
+                    if failure_rate >= self.config.failure_rate_threshold:
+                        self._transition_to(ServiceCircuitState.OPEN)
+    
+    def _calculate_failure_rate(self) -> float:
+        """Calculate failure rate from recent calls."""
+        if not self._recent_calls:
+            return 0.0
+        failures = sum(1 for success in self._recent_calls if not success)
+        return failures / len(self._recent_calls)
+    
+    def _transition_to(self, new_state: ServiceCircuitState):
+        """Transition to a new state."""
+        import time
+        old_state = self.state
+        self.state = new_state
+        
+        if new_state == ServiceCircuitState.OPEN:
+            self._opened_at = time.time()
+            self._success_count = 0
+        elif new_state in (ServiceCircuitState.HALF_OPEN, ServiceCircuitState.CLOSED):
+            self._failure_count = 0
+            self._success_count = 0
+        
+        logger.warning(
+            f"Service circuit breaker '{self.name}': {old_state.value} -> {new_state.value}"
+        )
+    
+    def reset(self):
+        """Manually reset to CLOSED state."""
+        with self._lock:
+            self._transition_to(ServiceCircuitState.CLOSED)
+    
+    def get_metrics(self) -> Dict:
+        """Get current metrics."""
+        with self._lock:
+            return {
+                "name": self.name,
+                "state": self.state.value,
+                "total_calls": self.total_calls,
+                "successful_calls": self.successful_calls,
+                "failed_calls": self.failed_calls,
+                "rejected_calls": self.rejected_calls,
+                "failure_rate": self._calculate_failure_rate(),
+            }
