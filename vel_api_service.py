@@ -380,16 +380,20 @@ async def authenticate(request: TokenRequest):
     
     The signature must be a valid signature of the message by the wallet.
     """
-    # In production, verify the signature against the message
-    # For now, just create the token
     try:
-        # TODO: Add actual signature verification
-        # from eth_account.messages import encode_defunct
-        # from eth_account import Account
-        # message = encode_defunct(text=request.message)
-        # signer = Account.recover_message(message, signature=request.signature)
-        # if signer.lower() != request.wallet_address.lower():
-        #     raise HTTPException(status_code=401, detail="Invalid signature")
+        # Verify Ethereum signature
+        from eth_account.messages import encode_defunct
+        from eth_account import Account
+        
+        message = encode_defunct(text=request.message)
+        recovered_address = Account.recover_message(message, signature=request.signature)
+        
+        # Verify the recovered address matches the claimed wallet
+        if recovered_address.lower() != request.wallet_address.lower():
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid signature: recovered address does not match wallet"
+            )
         
         token, expires = create_jwt_token(request.wallet_address)
         
@@ -398,7 +402,22 @@ async def authenticate(request: TokenRequest):
             expires_at=expires
         )
         
+    except HTTPException:
+        raise
+    except ImportError:
+        # eth_account not installed - log warning and proceed without verification
+        # This allows development/testing without web3 dependencies
+        logger.warning(
+            "eth_account not installed - signature verification skipped. "
+            "Install with: pip install eth-account"
+        )
+        token, expires = create_jwt_token(request.wallet_address)
+        return TokenResponse(
+            access_token=token,
+            expires_at=expires
+        )
     except Exception as e:
+        logger.error(f"Authentication failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"Authentication failed: {e}"

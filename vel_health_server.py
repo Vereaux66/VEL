@@ -406,21 +406,55 @@ def check_database_health() -> ComponentHealth:
 
 
 def check_redis_health() -> ComponentHealth:
-    """Check Redis connectivity."""
+    """Check Redis connectivity using actual PING command."""
+    import os
+    redis_url = os.environ.get("VEL_REDIS_URL", "redis://localhost:6379")
+    
     try:
-        import os
-        # TODO: Implement actual Redis PING using this URL when redis client is available
-        redis_url = os.environ.get("VEL_REDIS_URL", "redis://localhost:6379")  # noqa: F841
+        import redis
+        
+        # Parse Redis URL and connect
+        client = redis.from_url(redis_url, socket_connect_timeout=5)
+        
+        # Execute actual PING command
+        response = client.ping()
+        if response:
+            return ComponentHealth(
+                name="redis",
+                status=HealthStatus.HEALTHY,
+                message="Redis PING successful"
+            )
+        else:
+            return ComponentHealth(
+                name="redis",
+                status=HealthStatus.UNHEALTHY,
+                message="Redis PING returned False"
+            )
+            
+    except ImportError:
+        # Redis client not installed - report as degraded but not fatal
         return ComponentHealth(
             name="redis",
-            status=HealthStatus.HEALTHY,
-            message="Redis connection OK"
+            status=HealthStatus.DEGRADED,
+            message="Redis client not installed (pip install redis)"
+        )
+    except redis.ConnectionError as e:
+        return ComponentHealth(
+            name="redis",
+            status=HealthStatus.UNHEALTHY,
+            message=f"Redis connection failed: {e}"
+        )
+    except redis.TimeoutError:
+        return ComponentHealth(
+            name="redis",
+            status=HealthStatus.UNHEALTHY,
+            message="Redis connection timed out"
         )
     except Exception as e:
         return ComponentHealth(
             name="redis",
             status=HealthStatus.UNHEALTHY,
-            message=str(e)
+            message=f"Redis error: {e}"
         )
 
 

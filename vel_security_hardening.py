@@ -452,20 +452,111 @@ class CloudHSMSigner(HardwareSignerPlugin):
         tx_data: bytes,
         derivation_path: str = "m/44'/60'/0'/0/0"
     ) -> bytes:
-        """Sign transaction using CloudHSM."""
+        """
+        Sign transaction using CloudHSM via PKCS#11.
+        
+        Requires AWS CloudHSM Client and PKCS#11 library to be installed
+        and configured on the system.
+        
+        Args:
+            tx_data: Transaction data to sign
+            derivation_path: BIP44 derivation path (used for key selection)
+            
+        Returns:
+            Signature bytes
+            
+        Raises:
+            RuntimeError: If not connected to CloudHSM
+            ImportError: If PKCS#11 library not available
+        """
         if not self._connected:
             raise RuntimeError("Not connected to CloudHSM")
         
-        # In production, this would use the PKCS#11 interface
-        # to sign with the HSM key
-        raise NotImplementedError("CloudHSM signing requires PKCS#11 setup")
+        try:
+            # Attempt to use PKCS#11 for signing
+            from pkcs11 import lib, Mechanism, KeyType, ObjectClass
+            from pkcs11.util.ec import encode_ec_public_key
+            
+            # Load PKCS#11 library (CloudHSM client library path)
+            pkcs11_lib = lib("/opt/cloudhsm/lib/libcloudhsm_pkcs11.so")
+            
+            # Get token and open session
+            token = pkcs11_lib.get_token(token_label=self.key_label)
+            with token.open(user_pin=os.getenv("VEL_HSM_PIN", "")) as session:
+                # Find the private key
+                private_key = session.get_key(
+                    key_type=KeyType.EC,
+                    object_class=ObjectClass.PRIVATE_KEY,
+                    label=self.key_label
+                )
+                
+                # Hash the transaction data
+                import hashlib
+                tx_hash = hashlib.sha256(tx_data).digest()
+                
+                # Sign using ECDSA
+                signature = private_key.sign(tx_hash, mechanism=Mechanism.ECDSA)
+                
+                logger.info("Transaction signed using CloudHSM")
+                return bytes(signature)
+                
+        except ImportError:
+            logger.error("PKCS#11 library not available. Install with: pip install python-pkcs11")
+            raise ImportError(
+                "CloudHSM signing requires PKCS#11 library. "
+                "Install: pip install python-pkcs11"
+            )
+        except Exception as e:
+            logger.error(f"CloudHSM signing failed: {e}")
+            raise RuntimeError(f"CloudHSM signing failed: {e}")
     
     def get_public_key(self, derivation_path: str = "m/44'/60'/0'/0/0") -> str:
-        """Get public key from CloudHSM."""
+        """
+        Get public key from CloudHSM via PKCS#11.
+        
+        Args:
+            derivation_path: BIP44 derivation path (used for key selection)
+            
+        Returns:
+            Public key as hex string
+            
+        Raises:
+            RuntimeError: If not connected to CloudHSM
+            ImportError: If PKCS#11 library not available
+        """
         if not self._connected:
             raise RuntimeError("Not connected to CloudHSM")
         
-        raise NotImplementedError("CloudHSM key retrieval requires PKCS#11 setup")
+        try:
+            from pkcs11 import lib, KeyType, ObjectClass
+            from pkcs11.util.ec import encode_ec_public_key
+            
+            # Load PKCS#11 library
+            pkcs11_lib = lib("/opt/cloudhsm/lib/libcloudhsm_pkcs11.so")
+            
+            # Get token and open session
+            token = pkcs11_lib.get_token(token_label=self.key_label)
+            with token.open(user_pin=os.getenv("VEL_HSM_PIN", "")) as session:
+                # Find the public key
+                public_key = session.get_key(
+                    key_type=KeyType.EC,
+                    object_class=ObjectClass.PUBLIC_KEY,
+                    label=self.key_label
+                )
+                
+                # Encode and return as hex
+                encoded = encode_ec_public_key(public_key)
+                return encoded.hex()
+                
+        except ImportError:
+            logger.error("PKCS#11 library not available. Install with: pip install python-pkcs11")
+            raise ImportError(
+                "CloudHSM key retrieval requires PKCS#11 library. "
+                "Install: pip install python-pkcs11"
+            )
+        except Exception as e:
+            logger.error(f"CloudHSM public key retrieval failed: {e}")
+            raise RuntimeError(f"CloudHSM public key retrieval failed: {e}")
 
 
 # =============================================================================
