@@ -89,7 +89,7 @@ pub struct SubmitIntentResponse {
 /// Intent router for directing intents to appropriate backends
 pub struct IntentRouter {
     /// HTTP client for backend communication
-    client: Client,
+    pub client: Client,
     /// Configuration
     config: RoutingConfig,
     /// Intent cache for status tracking

@@ -35,9 +35,7 @@ use tower::ServiceBuilder;
 use tower_http::{
     compression::CompressionLayer,
     cors::{Any, CorsLayer},
-    request_id::MakeRequestUuid,
     trace::TraceLayer,
-    ServiceBuilderExt,
 };
 use tracing::{error, info, warn, Level};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -113,7 +111,6 @@ fn build_router(state: AppState) -> Router {
 
     // Build middleware stack
     let middleware_stack = ServiceBuilder::new()
-        .set_x_request_id(MakeRequestUuid)
         .layer(TraceLayer::new_for_http())
         .layer(CompressionLayer::new())
         .layer(cors);

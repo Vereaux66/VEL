@@ -207,13 +207,14 @@ class MockSimulator:
     
     def __init__(self):
         self._default_gas = 150000
-        self._price_impact_factor = 0.001  # 0.1% per 1000 units
+        self._price_impact_factor = 0.00001  # 0.001% per unit (more realistic)
     
     def simulate(self, intent: MockIntent) -> MockSimulationResult:
         # Calculate mock output based on amount
         amount = float(intent.amount_in)
-        price_impact = amount * self._price_impact_factor
-        slippage_bps = int(price_impact * 100)
+        # Cap price impact at 50% max
+        price_impact = min(0.5, amount * self._price_impact_factor)
+        slippage_bps = int(price_impact * 10000)  # Convert to basis points
         
         expected_output = Decimal(str(amount * (1 - price_impact)))
         
