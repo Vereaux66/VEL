@@ -102,7 +102,13 @@ check_aws_credentials() {
 }
 
 check_aws_region() {
-    # Use VEL_REGION if set, otherwise try AWS_REGION/AWS_DEFAULT_REGION, then aws config
+    # Region resolution priority:
+    # 1. VEL_REGION (if set)
+    # 2. AWS_REGION (if set)
+    # 3. AWS_DEFAULT_REGION (if set)
+    # 4. aws configure get region
+    # 5. Default to us-east-1
+    
     local region="${VEL_REGION:-${AWS_REGION:-${AWS_DEFAULT_REGION:-}}}"
     
     if [[ -z "$region" ]]; then
@@ -225,6 +231,11 @@ check_secrets_manager() {
         "${secret_prefix}/exchange-keys"
     )
     
+    # Secrets that are automatically created and populated by Terraform
+    local auto_created_secrets=(
+        "${secret_prefix}/app-secrets"
+    )
+    
     local secrets_found=0
     
     for secret in "${secret_names[@]}"; do
@@ -232,7 +243,16 @@ check_secrets_manager() {
             print_success "Secret '$secret' exists"
             secrets_found=$((secrets_found + 1))
         else
-            if [[ "$secret" == *"/app-secrets" ]]; then
+            # Check if this is an auto-created secret
+            local is_auto_created=false
+            for auto_secret in "${auto_created_secrets[@]}"; do
+                if [[ "$secret" == "$auto_secret" ]]; then
+                    is_auto_created=true
+                    break
+                fi
+            done
+            
+            if [[ "$is_auto_created" == "true" ]]; then
                 print_warning "Secret '$secret' not found (will be automatically created and populated by Terraform)"
             else
                 print_warning "Secret '$secret' not found (must be manually created with sensitive values after Terraform provisioning)"

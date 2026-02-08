@@ -107,10 +107,11 @@ docker push <account-id>.dkr.ecr.us-east-1.amazonaws.com/vel-trading:latest
 
 #### Step 4: Set Secrets
 
-**⚠️ WARNING: The following method creates a plaintext file with secrets. Use this only for initial testing. For production:**
-- Use AWS Secrets Manager (recommended - Terraform provisions this)
-- Pass secrets via `helm --set` or `helm --set-string` from environment variables
-- If you create `production-values.yaml`, add it to `.gitignore` immediately
+**⚠️ SECURITY WARNING:**
+- The values file approach creates plaintext secrets on disk
+- **NEVER** use this method in CI/CD pipelines
+- **NEVER** commit values files to version control, even temporarily
+- For production, use AWS Secrets Manager (recommended) or `helm --set` with environment variables
 
 ```bash
 # Generate secure keys
