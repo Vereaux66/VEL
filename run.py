@@ -22,7 +22,6 @@ Usage:
 import logging
 import sys
 import os
-from pathlib import Path
 
 # Configure logging
 logging.basicConfig(

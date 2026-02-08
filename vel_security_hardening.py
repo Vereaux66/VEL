@@ -478,16 +478,24 @@ class CloudHSMSigner(HardwareSignerPlugin):
         Requires AWS CloudHSM Client and PKCS#11 library to be installed
         and configured on the system.
         
+        For Ethereum transactions, callers should pass the pre-computed
+        Keccak-256 hash of the transaction (32 bytes). If raw transaction
+        data is passed, this method will compute the Keccak-256 hash.
+        
         Environment Variables:
             VEL_HSM_PIN: Required - HSM PIN for authentication
             VEL_PKCS11_LIB_PATH: Optional - Path to PKCS#11 library
         
         Args:
-            tx_data: Transaction data to sign
+            tx_data: Transaction data or pre-computed hash to sign.
+                     For Ethereum compatibility, pass the 32-byte Keccak-256 hash
+                     of the transaction, or raw data which will be hashed.
             derivation_path: BIP44 derivation path (used for key selection)
             
         Returns:
-            Signature bytes
+            ECDSA signature bytes (r || s format, 64 bytes).
+            Note: For Ethereum transactions, callers must add recovery id (v)
+            to construct the full (v, r, s) signature.
             
         Raises:
             RuntimeError: If not connected to CloudHSM or PIN not set
@@ -517,9 +525,23 @@ class CloudHSMSigner(HardwareSignerPlugin):
                     label=self.key_label
                 )
                 
-                # Hash the transaction data
-                import hashlib
-                tx_hash = hashlib.sha256(tx_data).digest()
+                # Determine if tx_data is already a hash (32 bytes) or needs hashing
+                if len(tx_data) == 32:
+                    # Assume pre-computed hash (caller should use Keccak-256)
+                    tx_hash = tx_data
+                else:
+                    # Hash with Keccak-256 for Ethereum compatibility
+                    try:
+                        from eth_hash.auto import keccak
+                        tx_hash = keccak(tx_data)
+                    except ImportError:
+                        # Fallback: use hashlib's sha3_256 (note: not identical to Keccak-256)
+                        # Warn user to install eth-hash for true Ethereum compatibility
+                        logger.warning(
+                            "eth-hash not installed - using SHA3-256 instead of Keccak-256. "
+                            "For Ethereum compatibility, install: pip install eth-hash[pycryptodome]"
+                        )
+                        tx_hash = hashlib.sha3_256(tx_data).digest()
                 
                 # Sign using ECDSA
                 signature = private_key.sign(tx_hash, mechanism=Mechanism.ECDSA)
@@ -527,12 +549,14 @@ class CloudHSMSigner(HardwareSignerPlugin):
                 logger.info("Transaction signed using CloudHSM")
                 return bytes(signature)
                 
-        except ImportError:
-            logger.error("PKCS#11 library not available. Install with: pip install python-pkcs11")
-            raise ImportError(
-                "CloudHSM signing requires PKCS#11 library. "
-                "Install: pip install python-pkcs11"
-            )
+        except ImportError as e:
+            if "pkcs11" in str(e).lower():
+                logger.error("PKCS#11 library not available. Install with: pip install python-pkcs11")
+                raise ImportError(
+                    "CloudHSM signing requires PKCS#11 library. "
+                    "Install: pip install python-pkcs11"
+                )
+            raise
         except Exception as e:
             logger.error(f"CloudHSM signing failed: {e}")
             raise RuntimeError(f"CloudHSM signing failed: {e}")

@@ -402,9 +402,10 @@ async def authenticate(request: TokenRequest):
             message = encode_defunct(text=request.message)
             recovered_address = Account.recover_message(message, signature=request.signature)
         except Exception as e:
+            logger.error(f"Signature recovery failed: {e}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid signature: could not recover address - {e}"
+                detail="Invalid signature: could not recover address"
             )
         
         # Verify the recovered address matches the claimed wallet
@@ -424,10 +425,21 @@ async def authenticate(request: TokenRequest):
     except HTTPException:
         raise
     except ImportError:
-        # eth_account not installed - log warning and proceed without verification
-        # This allows development/testing without web3 dependencies
+        # eth_account not installed - only allow in development
+        environment = os.getenv("VEL_ENVIRONMENT", "development").lower()
+        if environment == "production":
+            logger.error(
+                "SECURITY: eth_account not installed in production - "
+                "signature verification unavailable. Failing closed."
+            )
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Authentication service temporarily unavailable"
+            )
+        # Development/testing only - proceed without verification
         logger.warning(
             "eth_account not installed - signature verification skipped. "
+            "This is only allowed in non-production environments. "
             "Install with: pip install eth-account"
         )
         token, expires = create_jwt_token(request.wallet_address)
