@@ -4,15 +4,14 @@ VEL UNIFIED STARTUP SCRIPT
 ===========================
 Single entry point for all VEL trading system startup operations.
 
-Primary boot path uses the OrchestrationManifest for deterministic,
-phase-gated startup with safety kernel loaded before execution.
+This is the ONLY authoritative boot path for VEL. All boot operations
+go through vel_orchestration_manifest.py for deterministic, phase-gated
+startup with safety kernel loaded before execution.
 
-LEGACY NOTE: The --legacy flag falls back to ANVEL_MASTER.py which is
-deprecated. New deployments should use the default OrchestrationManifest path.
+NO FALLBACKS - If boot fails, system halts. No silent degradation.
 
 Usage:
     python START_ANVEL.py              # Deterministic boot (default, recommended)
-    python START_ANVEL.py --legacy     # DEPRECATED: Legacy ANVEL_MASTER boot
     python START_ANVEL.py --monitor    # Runtime monitoring only
     python START_ANVEL.py --skip-validation  # Skip pre-boot validation
     python START_ANVEL.py --help       # Show help
@@ -216,7 +215,6 @@ def show_help():
     """Display help information"""
     print(__doc__)
     print("\nOptions:")
-    print("  --legacy           Use legacy ANVEL_MASTER boot path")
     print("  --monitor          Launch runtime monitoring dashboard")
     print("  --skip-validation  Skip pre-boot validation checks")
     print("  --help             Show this help message")
@@ -238,12 +236,12 @@ def launch_monitor():
 
 
 def launch_orchestrated():
-    """Launch via deterministic OrchestrationManifest (primary boot path)."""
+    """Launch via deterministic OrchestrationManifest (the ONLY boot path)."""
     try:
         from vel_orchestration_manifest import OrchestrationManifest
         import json
 
-        logger.info("Starting ANVEL via OrchestrationManifest (deterministic boot)...")
+        logger.info("Starting VEL via OrchestrationManifest (deterministic boot)...")
 
         # Load config
         config = {}
@@ -262,12 +260,12 @@ def launch_orchestrated():
             )
             logger.error(f"Components online: {len(boot_report.components_online)}")
             logger.error(f"Components failed: {boot_report.components_failed}")
-            logger.warning("Falling back to legacy ANVEL_MASTER boot...")
-            launch_legacy()
-            return
+            # NO FALLBACK - Hard fail on boot failure
+            logger.critical("BOOT FAILURE - System cannot start. No fallback available.")
+            sys.exit(1)
 
         logger.info("=" * 50)
-        logger.info("ANVEL SYSTEM ONLINE")
+        logger.info("VEL SYSTEM ONLINE")
         logger.info(f"  Components: {len(boot_report.components_online)} online")
         logger.info(f"  Boot time:  {boot_report.total_duration_seconds:.1f}s")
         if boot_report.warnings:
@@ -286,36 +284,15 @@ def launch_orchestrated():
         logger.info("Initiating graceful shutdown...")
         shutdown_report = manifest.execute_shutdown_sequence()
         stopped = sum(1 for v in shutdown_report.values() if v == "stopped")
-        logger.info(f"ANVEL stopped ({stopped} components shut down)")
+        logger.info(f"VEL stopped ({stopped} components shut down)")
 
-    except ImportError:
-        logger.warning("OrchestrationManifest not available — using legacy boot")
-        launch_legacy()
-    except Exception as e:
-        logger.error(f"Error in orchestrated boot: {e}")
-        logger.warning("Falling back to legacy ANVEL_MASTER boot...")
-        launch_legacy()
-
-
-def launch_legacy():
-    """Launch ANVEL system via legacy ANVEL_MASTER.
-    
-    DEPRECATED: This legacy boot path is maintained for backward compatibility
-    but should not be used in new deployments. Use the default OrchestrationManifest
-    boot path instead for deterministic behavior.
-    """
-    logger.warning("=" * 50)
-    logger.warning("DEPRECATION WARNING: Legacy boot is deprecated")
-    logger.warning("Use the default boot path for production deployments")
-    logger.warning("=" * 50)
-    try:
-        from ANVEL_MASTER import main as master_main
-        master_main()
     except ImportError as e:
-        logger.error(f"Could not import ANVEL_MASTER: {e}")
+        logger.critical(f"OrchestrationManifest import failed: {e}")
+        logger.critical("BOOT FAILURE - Required module missing. Cannot start.")
         sys.exit(1)
     except Exception as e:
-        logger.error(f"Error launching system: {e}")
+        logger.critical(f"Boot error: {e}")
+        logger.critical("BOOT FAILURE - System cannot start.")
         sys.exit(1)
 
 
@@ -349,7 +326,7 @@ def run_pre_boot_validation() -> bool:
 
 
 def main():
-    """Unified entry point"""
+    """Unified entry point - orchestration manifest is the ONLY boot path"""
     args = sys.argv[1:]
 
     if "--help" in args or "-h" in args:
@@ -368,12 +345,7 @@ def main():
         if not run_pre_boot_validation():
             sys.exit(1)
 
-    if "--legacy" in args or "--wizard" in args:
-        logger.info("Launching via legacy ANVEL_MASTER...")
-        launch_legacy()
-        return
-
-    # Default: deterministic orchestrated boot
+    # Default: deterministic orchestrated boot (ONLY path)
     launch_orchestrated()
 
 
