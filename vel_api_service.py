@@ -385,8 +385,27 @@ async def authenticate(request: TokenRequest):
         from eth_account.messages import encode_defunct
         from eth_account import Account
         
-        message = encode_defunct(text=request.message)
-        recovered_address = Account.recover_message(message, signature=request.signature)
+        # Validate signature format (basic check for hex string)
+        sig = request.signature
+        if not sig.startswith('0x'):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid signature format: must start with '0x'"
+            )
+        if len(sig) != 132:  # 0x + 130 hex chars (65 bytes)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid signature format: incorrect length"
+            )
+        
+        try:
+            message = encode_defunct(text=request.message)
+            recovered_address = Account.recover_message(message, signature=request.signature)
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid signature: could not recover address - {e}"
+            )
         
         # Verify the recovered address matches the claimed wallet
         if recovered_address.lower() != request.wallet_address.lower():

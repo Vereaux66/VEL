@@ -413,23 +413,27 @@ def check_redis_health() -> ComponentHealth:
     try:
         import redis
         
-        # Parse Redis URL and connect
+        # Parse Redis URL and connect with context manager
         client = redis.from_url(redis_url, socket_connect_timeout=5)
         
-        # Execute actual PING command
-        response = client.ping()
-        if response:
-            return ComponentHealth(
-                name="redis",
-                status=HealthStatus.HEALTHY,
-                message="Redis PING successful"
-            )
-        else:
-            return ComponentHealth(
-                name="redis",
-                status=HealthStatus.UNHEALTHY,
-                message="Redis PING returned False"
-            )
+        try:
+            # Execute actual PING command
+            response = client.ping()
+            if response:
+                return ComponentHealth(
+                    name="redis",
+                    status=HealthStatus.HEALTHY,
+                    message="Redis PING successful"
+                )
+            else:
+                return ComponentHealth(
+                    name="redis",
+                    status=HealthStatus.UNHEALTHY,
+                    message="Redis PING returned False"
+                )
+        finally:
+            # Always close the connection
+            client.close()
             
     except ImportError:
         # Redis client not installed - report as degraded but not fatal

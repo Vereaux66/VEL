@@ -10,6 +10,9 @@ phase-gated startup with safety kernel loaded before execution.
 All boot operations go through vel_orchestration_manifest.py.
 NO FALLBACKS - If boot fails, system halts. No silent degradation.
 
+WARNING: This script changes the working directory when run directly.
+         It should be executed directly, not imported as a module.
+
 Usage:
     python run.py              # Standard boot (recommended)
     python run.py --dry-run    # Validate without starting
@@ -21,15 +24,16 @@ import sys
 import os
 from pathlib import Path
 
-# Ensure we're in the correct directory
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
-
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger("vel.run")
+
+# Only change directory when run directly, not when imported
+if __name__ == "__main__":
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 
 def main() -> int:

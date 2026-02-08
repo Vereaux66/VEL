@@ -427,6 +427,26 @@ class CloudHSMSigner(HardwareSignerPlugin):
         self.key_label = key_label
         self.region = region
         self._session = None
+        # Configurable PKCS#11 library path via environment variable
+        self._pkcs11_lib_path = os.getenv(
+            "VEL_PKCS11_LIB_PATH",
+            "/opt/cloudhsm/lib/libcloudhsm_pkcs11.so"
+        )
+    
+    def _get_hsm_pin(self) -> str:
+        """
+        Get HSM PIN from environment variable.
+        
+        Raises:
+            RuntimeError: If VEL_HSM_PIN environment variable is not set
+        """
+        hsm_pin = os.getenv("VEL_HSM_PIN")
+        if not hsm_pin:
+            raise RuntimeError(
+                "VEL_HSM_PIN environment variable must be set for CloudHSM operations. "
+                "This is required for secure HSM authentication."
+            )
+        return hsm_pin
     
     def connect(self) -> bool:
         """Connect to CloudHSM cluster."""
@@ -458,6 +478,10 @@ class CloudHSMSigner(HardwareSignerPlugin):
         Requires AWS CloudHSM Client and PKCS#11 library to be installed
         and configured on the system.
         
+        Environment Variables:
+            VEL_HSM_PIN: Required - HSM PIN for authentication
+            VEL_PKCS11_LIB_PATH: Optional - Path to PKCS#11 library
+        
         Args:
             tx_data: Transaction data to sign
             derivation_path: BIP44 derivation path (used for key selection)
@@ -466,23 +490,26 @@ class CloudHSMSigner(HardwareSignerPlugin):
             Signature bytes
             
         Raises:
-            RuntimeError: If not connected to CloudHSM
+            RuntimeError: If not connected to CloudHSM or PIN not set
             ImportError: If PKCS#11 library not available
         """
         if not self._connected:
             raise RuntimeError("Not connected to CloudHSM")
+        
+        # Validate HSM PIN is set
+        hsm_pin = self._get_hsm_pin()
         
         try:
             # Attempt to use PKCS#11 for signing
             from pkcs11 import lib, Mechanism, KeyType, ObjectClass
             from pkcs11.util.ec import encode_ec_public_key
             
-            # Load PKCS#11 library (CloudHSM client library path)
-            pkcs11_lib = lib("/opt/cloudhsm/lib/libcloudhsm_pkcs11.so")
+            # Load PKCS#11 library (configurable via environment variable)
+            pkcs11_lib = lib(self._pkcs11_lib_path)
             
             # Get token and open session
             token = pkcs11_lib.get_token(token_label=self.key_label)
-            with token.open(user_pin=os.getenv("VEL_HSM_PIN", "")) as session:
+            with token.open(user_pin=hsm_pin) as session:
                 # Find the private key
                 private_key = session.get_key(
                     key_type=KeyType.EC,
@@ -514,6 +541,10 @@ class CloudHSMSigner(HardwareSignerPlugin):
         """
         Get public key from CloudHSM via PKCS#11.
         
+        Environment Variables:
+            VEL_HSM_PIN: Required - HSM PIN for authentication
+            VEL_PKCS11_LIB_PATH: Optional - Path to PKCS#11 library
+        
         Args:
             derivation_path: BIP44 derivation path (used for key selection)
             
@@ -521,22 +552,25 @@ class CloudHSMSigner(HardwareSignerPlugin):
             Public key as hex string
             
         Raises:
-            RuntimeError: If not connected to CloudHSM
+            RuntimeError: If not connected to CloudHSM or PIN not set
             ImportError: If PKCS#11 library not available
         """
         if not self._connected:
             raise RuntimeError("Not connected to CloudHSM")
         
+        # Validate HSM PIN is set
+        hsm_pin = self._get_hsm_pin()
+        
         try:
             from pkcs11 import lib, KeyType, ObjectClass
             from pkcs11.util.ec import encode_ec_public_key
             
-            # Load PKCS#11 library
-            pkcs11_lib = lib("/opt/cloudhsm/lib/libcloudhsm_pkcs11.so")
+            # Load PKCS#11 library (configurable via environment variable)
+            pkcs11_lib = lib(self._pkcs11_lib_path)
             
             # Get token and open session
             token = pkcs11_lib.get_token(token_label=self.key_label)
-            with token.open(user_pin=os.getenv("VEL_HSM_PIN", "")) as session:
+            with token.open(user_pin=hsm_pin) as session:
                 # Find the public key
                 public_key = session.get_key(
                     key_type=KeyType.EC,
