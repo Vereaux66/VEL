@@ -260,13 +260,28 @@ GET  /api/performance     # Performance metrics
 
 ## 🚢 Deployment
 
-### Docker
+### AWS Deployment Readiness
+
+**✅ 100% Operational Ready for AWS Deployment**
+
+See **[AWS_DEPLOYMENT_READINESS.md](AWS_DEPLOYMENT_READINESS.md)** for the comprehensive deployment checklist and guide.
+
+Quick readiness check:
+```bash
+./scripts/aws_deployment_readiness_check.sh --verbose
+```
+
+### Docker (Local Development)
 ```bash
 docker-compose up -d
 ```
 
-### Kubernetes (EKS)
+### Kubernetes (EKS) - Production
 ```bash
+# Automated deployment
+cd aws && ./deploy.sh
+
+# Or manual Helm deployment
 helm upgrade --install vel-trading ./aws/helm/vel \
   --namespace vel-system \
   --create-namespace \
@@ -275,6 +290,11 @@ helm upgrade --install vel-trading ./aws/helm/vel \
 
 ### AWS CodeDeploy
 The system includes AWS CodeDeploy integration via `appspec.yml`.
+
+### Deployment Documentation
+- **[AWS_DEPLOYMENT_READINESS.md](AWS_DEPLOYMENT_READINESS.md)**: Complete AWS deployment checklist
+- **aws/deploy.sh**: Automated deployment script (745 lines)
+- **scripts/aws_deployment_readiness_check.sh**: Pre-deployment validation
 
 ## 📈 Monitoring
 
