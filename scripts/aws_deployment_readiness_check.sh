@@ -232,7 +232,11 @@ check_secrets_manager() {
             print_success "Secret '$secret' exists"
             secrets_found=$((secrets_found + 1))
         else
-            print_warning "Secret '$secret' not found (will be created by Terraform on first deployment)"
+            if [[ "$secret" == *"/app-secrets" ]]; then
+                print_warning "Secret '$secret' not found (will be automatically created and populated by Terraform)"
+            else
+                print_warning "Secret '$secret' not found (must be manually created with sensitive values after Terraform provisioning)"
+            fi
         fi
     done
     

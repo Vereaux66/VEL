@@ -125,7 +125,10 @@ REDIS_ENDPOINT=$(terraform output -raw vel_redis_endpoint)
 cd ../..
 
 # Option 1: Use environment variables with helm --set (RECOMMENDED)
-helm upgrade --install vel-trading ./aws/helm/vel \
+# Using "trading" as the release name will create:
+# - Deployment: vel-trading-engine
+# - Service: vel-trading-endpoint
+helm upgrade --install trading ./aws/helm/vel \
   --namespace vel-system \
   --create-namespace \
   --set velConfig.flaskSecretKey="$FLASK_SECRET" \
@@ -163,8 +166,8 @@ EOF
 # IMPORTANT: Add to .gitignore immediately
 echo "production-values.yaml" >> .gitignore
 
-# Deploy with values file
-helm upgrade --install vel-trading ./aws/helm/vel \
+# Deploy with values file (using "trading" as release name)
+helm upgrade --install trading ./aws/helm/vel \
   --namespace vel-system \
   --values production-values.yaml \
   --wait --timeout 15m
