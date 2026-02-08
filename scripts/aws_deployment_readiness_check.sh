@@ -14,7 +14,7 @@
 #   2 - Warnings present, review before deploying
 # =============================================================================
 
-set -eo pipefail
+set -o pipefail
 
 # Colors for output
 RED='\033[0;31m'
@@ -44,17 +44,17 @@ print_header() {
 
 print_success() {
     echo -e "${GREEN}✅ $1${NC}"
-    ((CHECKS_PASSED++))
+    CHECKS_PASSED=$((CHECKS_PASSED + 1))
 }
 
 print_failure() {
     echo -e "${RED}❌ $1${NC}"
-    ((CHECKS_FAILED++))
+    CHECKS_FAILED=$((CHECKS_FAILED + 1))
 }
 
 print_warning() {
     echo -e "${YELLOW}⚠️  $1${NC}"
-    ((CHECKS_WARNING++))
+    CHECKS_WARNING=$((CHECKS_WARNING + 1))
 }
 
 print_info() {
@@ -102,15 +102,21 @@ check_aws_credentials() {
 }
 
 check_aws_region() {
-    local region
-    region=$(aws configure get region 2>/dev/null || echo "")
+    # Use VEL_REGION if set, otherwise try AWS_REGION/AWS_DEFAULT_REGION, then aws config
+    local region="${VEL_REGION:-${AWS_REGION:-${AWS_DEFAULT_REGION:-}}}"
+    
+    if [[ -z "$region" ]]; then
+        region=$(aws configure get region 2>/dev/null || echo "")
+    fi
     
     if [[ -n "$region" ]]; then
         print_success "AWS region configured: $region"
+        export VEL_REGION="$region"
         export AWS_REGION="$region"
         return 0
     else
         print_warning "AWS region not explicitly set, using default: us-east-1"
+        export VEL_REGION="us-east-1"
         export AWS_REGION="us-east-1"
         return 0
     fi
@@ -206,11 +212,17 @@ check_redis_cluster() {
 check_secrets_manager() {
     print_header "Secrets Manager"
     
+    # Ensure environment is set so we can use the Terraform secret naming scheme
+    local env="${VEL_ENVIRONMENT:-production}"
+    if [[ -z "$VEL_ENVIRONMENT" ]]; then
+        print_warning "VEL_ENVIRONMENT not set, assuming 'production' for secret name checks"
+    fi
+    
+    local secret_prefix="vel/${env}"
     local secret_names=(
-        "vel-app-secrets"
-        "vel-wallet-keys"
-        "vel-redis-auth"
-        "vel-db-password"
+        "${secret_prefix}/app-secrets"
+        "${secret_prefix}/wallet-keys"
+        "${secret_prefix}/exchange-keys"
     )
     
     local secrets_found=0
@@ -218,9 +230,9 @@ check_secrets_manager() {
     for secret in "${secret_names[@]}"; do
         if aws secretsmanager describe-secret --secret-id "$secret" --region "$AWS_REGION" &> /dev/null; then
             print_success "Secret '$secret' exists"
-            ((secrets_found++))
+            secrets_found=$((secrets_found + 1))
         else
-            print_warning "Secret '$secret' not found (should be created before deployment)"
+            print_warning "Secret '$secret' not found (will be created by Terraform on first deployment)"
         fi
     done
     
@@ -419,7 +431,7 @@ check_python_tests() {
     fi
     
     # Check if dependencies are installed
-    if ! python -c "import flask" &> /dev/null; then
+    if ! python3 -c "import flask" &> /dev/null; then
         print_warning "Python dependencies not installed, skipping tests"
         echo "  Install with: pip install -r requirements.txt"
         return 0
@@ -430,16 +442,31 @@ check_python_tests() {
     # Set required environment variable for tests
     export ANVEL_MASTER_KEY=$(python3 -c 'import secrets; print(secrets.token_hex(32))' 2>/dev/null || echo "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
     
-    # Run tests with short timeout
-    if timeout 120 python -m pytest tests/ -v --tb=short &> /tmp/vel-pytest.log; then
-        local test_count
-        test_count=$(grep -c "PASSED" /tmp/vel-pytest.log || echo "0")
-        print_success "Tests passed ($test_count tests)"
-        return 0
+    # Check if timeout command is available
+    if command -v timeout &> /dev/null; then
+        # Run tests with timeout
+        if timeout 120 python3 -m pytest tests/ -v --tb=short &> /tmp/vel-pytest.log; then
+            local test_count
+            test_count=$(grep -c "PASSED" /tmp/vel-pytest.log || echo "0")
+            print_success "Tests passed ($test_count tests)"
+            return 0
+        else
+            print_warning "Some tests failed or timed out"
+            echo "  See /tmp/vel-pytest.log for details"
+            return 0  # Warning, not critical for deployment readiness
+        fi
     else
-        print_warning "Some tests failed or timed out"
-        echo "  See /tmp/vel-pytest.log for details"
-        return 0  # Warning, not critical for deployment readiness
+        # Run tests without timeout (may hang on slow systems)
+        if python3 -m pytest tests/ -v --tb=short &> /tmp/vel-pytest.log; then
+            local test_count
+            test_count=$(grep -c "PASSED" /tmp/vel-pytest.log || echo "0")
+            print_success "Tests passed ($test_count tests)"
+            return 0
+        else
+            print_warning "Some tests failed"
+            echo "  See /tmp/vel-pytest.log for details"
+            return 0  # Warning, not critical for deployment readiness
+        fi
     fi
 }
 
@@ -476,13 +503,22 @@ main() {
     
     # Check CLI tools
     print_header "CLI Tools"
-    check_command "aws" "AWS CLI"
-    check_command "kubectl" "kubectl"
-    check_command "helm" "Helm"
-    check_command "terraform" "Terraform"
-    check_command "docker" "Docker" || print_warning "Docker not required but recommended for local testing"
-    check_command "python3" "Python 3"
-    check_command "git" "Git"
+    check_command "aws" "AWS CLI" || true
+    check_command "kubectl" "kubectl" || true
+    check_command "helm" "Helm" || true
+    check_command "terraform" "Terraform" || true
+    
+    # Docker is optional for this check but required for deployment
+    if command -v docker &> /dev/null; then
+        local version
+        version=$(docker --version 2>&1 | head -n1 || echo "unknown")
+        print_success "Docker installed: $version"
+    else
+        print_warning "Docker not installed (required for building images locally)"
+    fi
+    
+    check_command "python3" "Python 3" || true
+    check_command "git" "Git" || true
     
     # Check AWS setup
     check_aws_credentials

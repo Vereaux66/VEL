@@ -107,13 +107,38 @@ docker push <account-id>.dkr.ecr.us-east-1.amazonaws.com/vel-trading:latest
 
 #### Step 4: Set Secrets
 
+**⚠️ WARNING: The following method creates a plaintext file with secrets. Use this only for initial testing. For production:**
+- Use AWS Secrets Manager (recommended - Terraform provisions this)
+- Pass secrets via `helm --set` or `helm --set-string` from environment variables
+- If you create `production-values.yaml`, add it to `.gitignore` immediately
+
 ```bash
 # Generate secure keys
 FLASK_SECRET=$(python3 -c 'import secrets; print(secrets.token_hex(32))')
 JWT_SECRET=$(python3 -c 'import secrets; print(secrets.token_hex(32))')
 WEB_PASSWORD="your-secure-password-min-12-chars"
 
-# Create production values file
+# Get endpoints from Terraform outputs
+cd aws/terraform
+RDS_ENDPOINT=$(terraform output -raw vel_db_endpoint)
+REDIS_ENDPOINT=$(terraform output -raw vel_redis_endpoint)
+cd ../..
+
+# Option 1: Use environment variables with helm --set (RECOMMENDED)
+helm upgrade --install vel-trading ./aws/helm/vel \
+  --namespace vel-system \
+  --create-namespace \
+  --set velConfig.flaskSecretKey="$FLASK_SECRET" \
+  --set velConfig.jwtSecretKey="$JWT_SECRET" \
+  --set velConfig.webPassword="$WEB_PASSWORD" \
+  --set velConfig.dbHost="$RDS_ENDPOINT" \
+  --set velConfig.redisHost="$REDIS_ENDPOINT" \
+  --set image.repository="<account-id>.dkr.ecr.us-east-1.amazonaws.com/vel-trading" \
+  --set image.tag="latest" \
+  --wait --timeout 15m
+
+# Option 2: Use a values file (NOT RECOMMENDED - creates plaintext secrets)
+# Only use for development/testing
 cat > production-values.yaml <<EOF
 global:
   environment: production
@@ -127,22 +152,25 @@ velConfig:
   flaskSecretKey: "$FLASK_SECRET"
   jwtSecretKey: "$JWT_SECRET"
   webPassword: "$WEB_PASSWORD"
-  dbHost: "<rds-endpoint>"
-  dbPassword: "<db-password>"
-  redisHost: "<redis-endpoint>"
+  dbHost: "$RDS_ENDPOINT"
+  redisHost: "$REDIS_ENDPOINT"
 
 autoscaling:
   minReplicas: 6
   maxReplicas: 24
 EOF
-```
 
-**Get endpoints from Terraform outputs:**
+# IMPORTANT: Add to .gitignore immediately
+echo "production-values.yaml" >> .gitignore
 
-```bash
-cd aws/terraform
-terraform output vel_db_endpoint
-terraform output vel_redis_endpoint
+# Deploy with values file
+helm upgrade --install vel-trading ./aws/helm/vel \
+  --namespace vel-system \
+  --values production-values.yaml \
+  --wait --timeout 15m
+
+# Remove the file after deployment
+rm production-values.yaml
 ```
 
 #### Step 5: Deploy with Helm
@@ -151,15 +179,26 @@ terraform output vel_redis_endpoint
 # Create namespace
 kubectl create namespace vel-system
 
+# Note: The Helm chart generates resource names like:
+# - Deployment: vel-<release-name>-engine
+# - Service: vel-<release-name>-endpoint
+# Where <release-name> is "trading" in this example
+
 # Deploy application
-helm upgrade --install vel-trading ./aws/helm/vel \
+helm upgrade --install trading ./aws/helm/vel \
   --namespace vel-system \
-  --values production-values.yaml \
+  --set image.repository="<ecr-repo>/vel-trading" \
+  --set image.tag="latest" \
+  --set velConfig.flaskSecretKey="$FLASK_SECRET" \
+  --set velConfig.jwtSecretKey="$JWT_SECRET" \
+  --set velConfig.webPassword="$WEB_PASSWORD" \
+  --set velConfig.dbHost="$RDS_ENDPOINT" \
+  --set velConfig.redisHost="$REDIS_ENDPOINT" \
   --wait --timeout 15m
 
-# Verify deployment
-kubectl rollout status deployment/vel-trading -n vel-system
-kubectl get pods -n vel-system -l app=vel-trading
+# Verify deployment (using actual generated names)
+kubectl rollout status deployment/vel-trading-engine -n vel-system
+kubectl get pods -n vel-system -l vel.kessann.bot/app=trading-engine
 ```
 
 ---
@@ -205,9 +244,10 @@ kubectl exec -it -n vel-system deployment/vel-trading -- \
 # CloudWatch logs
 aws logs tail /vel/application --follow --region us-east-1
 
-# Prometheus metrics
-kubectl port-forward -n vel-system svc/vel-trading 9090:9090
-curl http://localhost:9090/metrics
+# Prometheus metrics (port forward to the service)
+# Note: Service name depends on Helm release name, e.g., "vel-trading-endpoint" for release "trading"
+kubectl port-forward -n vel-system svc/vel-trading-endpoint 8080:80
+curl http://localhost:8080/metrics
 ```
 
 ### 5. Run Smoke Tests

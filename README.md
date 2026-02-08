@@ -262,9 +262,9 @@ GET  /api/performance     # Performance metrics
 
 ### AWS Deployment Readiness
 
-**✅ 100% Operational Ready for AWS Deployment**
+**✅ Infrastructure and deployment tooling are in place for AWS**
 
-See **[AWS_DEPLOYMENT_READINESS.md](AWS_DEPLOYMENT_READINESS.md)** for the comprehensive deployment checklist and guide.
+See **[AWS_DEPLOYMENT_READINESS.md](AWS_DEPLOYMENT_READINESS.md)** for the comprehensive deployment checklist, including one-time AWS provisioning and secrets configuration required before the first deploy.
 
 Quick readiness check:
 ```bash

@@ -156,11 +156,12 @@ Before deploying, operators must:
   - XSS protection: Enabled
   - Geo-blocking: Configured if needed
   
-- [ ] **AWS Secrets Manager**: Application secrets stored
-  - `vel-app-secrets`: Flask secret key, JWT secret, web password
-  - `vel-wallet-keys`: Blockchain wallet private keys
-  - `vel-redis-auth`: Redis AUTH token
-  - `vel-db-password`: RDS master password
+- [ ] **AWS Secrets Manager**: Application secrets stored (per-environment under `vel/<env>/...`)
+  - `vel/${vel_env_name}/app-secrets` (e.g., `vel/production/app-secrets`): Application secrets including Flask secret key, JWT secret, database credentials, Redis configuration
+  - `vel/${vel_env_name}/wallet-keys` (e.g., `vel/production/wallet-keys`): Blockchain wallet private keys
+  - `vel/${vel_env_name}/exchange-keys` (e.g., `vel/production/exchange-keys`): API keys and secrets for external exchanges and integrations
+  
+  **Note:** Terraform creates these secrets with the naming pattern `vel/${vel_env_name}/<secret-name>` where `vel_env_name` defaults to "production". The `app-secrets` secret is automatically populated by Terraform with database endpoints and generated secrets.
 
 ### Monitoring Infrastructure
 
@@ -772,110 +773,37 @@ aws rds restore-db-instance-from-db-snapshot \
 
 ## Deployment Readiness Validation Script
 
-Create and run this validation script before deploying:
+The automated readiness check script is maintained at:
+
+**`scripts/aws_deployment_readiness_check.sh`**
+
+Run the script from the repository root to validate that the platform is ready for AWS deployment:
 
 ```bash
-#!/bin/bash
-# aws_deployment_readiness_check.sh
+# Make script executable (if not already)
+chmod +x scripts/aws_deployment_readiness_check.sh
 
-echo "=== VEL AWS Deployment Readiness Check ==="
-echo
+# Run basic validation
+./scripts/aws_deployment_readiness_check.sh
 
-# Check AWS CLI
-if ! command -v aws &> /dev/null; then
-    echo "❌ AWS CLI not found"
-    exit 1
-else
-    echo "✅ AWS CLI installed"
-fi
-
-# Check kubectl
-if ! command -v kubectl &> /dev/null; then
-    echo "❌ kubectl not found"
-    exit 1
-else
-    echo "✅ kubectl installed"
-fi
-
-# Check Helm
-if ! command -v helm &> /dev/null; then
-    echo "❌ Helm not found"
-    exit 1
-else
-    echo "✅ Helm installed"
-fi
-
-# Check Terraform
-if ! command -v terraform &> /dev/null; then
-    echo "❌ Terraform not found"
-    exit 1
-else
-    echo "✅ Terraform installed"
-fi
-
-# Check AWS credentials
-if aws sts get-caller-identity &> /dev/null; then
-    echo "✅ AWS credentials configured"
-else
-    echo "❌ AWS credentials not configured"
-    exit 1
-fi
-
-# Check EKS cluster access
-if kubectl get nodes &> /dev/null; then
-    echo "✅ EKS cluster accessible"
-else
-    echo "⚠️  EKS cluster not accessible (may not be created yet)"
-fi
-
-# Check ECR repository
-if aws ecr describe-repositories --repository-names vel-trading &> /dev/null; then
-    echo "✅ ECR repository exists"
-else
-    echo "⚠️  ECR repository not found (will be created)"
-fi
-
-# Check Terraform state
-if [ -f "aws/terraform/terraform.tfstate" ]; then
-    echo "✅ Terraform state exists"
-else
-    echo "⚠️  Terraform state not found (first deployment)"
-fi
-
-# Check required files
-FILES=(
-    "Dockerfile"
-    "requirements.txt"
-    "gunicorn.conf.py"
-    "wsgi.py"
-    ".github/workflows/ci-cd.yml"
-    "buildspec.yml"
-    "appspec.yml"
-    "aws/terraform/main.tf"
-    "aws/helm/vel/Chart.yaml"
-    "aws/helm/vel/values.yaml"
-)
-
-for file in "${FILES[@]}"; do
-    if [ -f "$file" ]; then
-        echo "✅ $file exists"
-    else
-        echo "❌ $file not found"
-        exit 1
-    fi
-done
-
-echo
-echo "=== Readiness Summary ==="
-echo "✅ All critical checks passed"
-echo "✅ System is ready for AWS deployment"
-echo
-echo "Next steps:"
-echo "1. Review aws/terraform/variables.tf and customize if needed"
-echo "2. Set required secrets in AWS Secrets Manager"
-echo "3. Configure GitHub repository secrets for CI/CD"
-echo "4. Run: cd aws && ./deploy.sh"
+# Run with verbose output (includes Docker build and Python tests)
+./scripts/aws_deployment_readiness_check.sh --verbose
 ```
+
+**The script validates:**
+- ✅ CLI tools installed (AWS CLI, kubectl, helm, terraform, docker)
+- ✅ AWS credentials configured
+- ✅ AWS resources (EKS, ECR, RDS, Redis, Route53, ACM)
+- ✅ Required project files present
+- ✅ Terraform configuration valid
+- ✅ Helm charts valid
+- ✅ Docker image builds successfully (verbose mode)
+- ✅ Tests pass (verbose mode)
+
+**Exit codes:**
+- `0` - All checks passed, ready for deployment
+- `1` - Critical checks failed, not ready for deployment
+- `2` - Warnings present, review before deploying
 
 ---
 
