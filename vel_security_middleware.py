@@ -17,6 +17,7 @@ All routes must pass through this middleware.
 """
 
 import functools
+import hashlib
 import hmac
 import logging
 import os
@@ -27,6 +28,13 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 from flask import Flask, Request, g, jsonify, request
+
+# JWT validation
+try:
+    import jwt
+    JWT_AVAILABLE = True
+except ImportError:
+    JWT_AVAILABLE = False
 
 logger = logging.getLogger("vel.security.middleware")
 
@@ -542,18 +550,59 @@ def require_auth(f: Callable) -> Callable:
         
         # Validate JWT
         if auth_header and auth_header.startswith("Bearer "):
-            _token = auth_header.split(" ", 1)[1]  # placeholder for future JWT validation
+            token = auth_header.split(" ", 1)[1]
             try:
-                # TODO: Implement proper JWT validation using PyJWT
-                # Decode and verify token signature, expiration, and claims
-                # For now, just set a placeholder
-                g.user_id = "authenticated_user"
+                # Validate JWT token
+                if not JWT_AVAILABLE:
+                    logger.error("JWT validation requested but PyJWT is not installed")
+                    return jsonify({
+                        "error": "server_error",
+                        "message": "JWT validation unavailable"
+                    }), 500
+                
+                # Get JWT secret from environment
+                jwt_secret = os.environ.get("VEL_JWT_SECRET")
+                if not jwt_secret:
+                    logger.error("VEL_JWT_SECRET not configured")
+                    return jsonify({
+                        "error": "server_error",
+                        "message": "Authentication not configured"
+                    }), 500
+                
+                # Decode and verify token
+                payload = jwt.decode(
+                    token,
+                    jwt_secret,
+                    algorithms=["HS256"],
+                    options={
+                        "require": ["exp", "sub", "iat"],
+                        "verify_exp": True,
+                        "verify_iat": True,
+                    }
+                )
+                
+                # Set authenticated user info
+                g.user_id = payload.get("sub")
                 g.auth_method = "jwt"
-            except Exception as e:
+                g.jwt_claims = payload
+                
+            except jwt.ExpiredSignatureError:
+                logger.warning("JWT token expired")
+                return jsonify({
+                    "error": "token_expired",
+                    "message": "Token has expired"
+                }), 401
+            except jwt.InvalidTokenError as e:
                 logger.warning(f"JWT validation failed: {e}")
                 return jsonify({
                     "error": "invalid_token",
-                    "message": "Invalid or expired token"
+                    "message": "Invalid or malformed token"
+                }), 401
+            except Exception as e:
+                logger.error(f"Unexpected JWT validation error: {e}")
+                return jsonify({
+                    "error": "invalid_token",
+                    "message": "Token validation failed"
                 }), 401
         
         # Validate API key

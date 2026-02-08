@@ -1,10 +1,10 @@
 # VEL Archive (VEL_ARC)
 
-This directory contains archived modules that have been deprecated or consolidated as part of the VEL architecture consolidation effort.
+This directory contains archived modules, documentation, and legacy files that have been deprecated or consolidated as part of the VEL architecture hardening effort.
 
 ## Purpose
 
-The VEL_ARC directory preserves legacy code for:
+The VEL_ARC directory preserves legacy code and documentation for:
 - Reference and historical purposes
 - Potential future reference during debugging
 - Audit trail of architectural changes
@@ -16,6 +16,31 @@ The VEL_ARC directory preserves legacy code for:
 ```
 VEL_ARC/
 ├── README.md                    # This file
+├── docs_archive/                # Archived documentation
+│   ├── AI_SELF_REPAIR_CONSOLIDATION.md
+│   ├── CHANGELOG.md
+│   ├── CODE_STANDARDS.md
+│   ├── CONSOLIDATION_SUMMARY.md
+│   ├── DEX_QUICK_START.md
+│   ├── IMPLEMENTATION_STATUS.md
+│   ├── IMPLEMENTATION_SUMMARY.md
+│   ├── OPERATIONAL_HARDENING_SUMMARY.md
+│   ├── PR_COMPLETION_REPORT.md
+│   ├── STATUS_REPORT.md
+│   ├── TRADING_SYSTEM_README.md
+│   ├── VEL_EXECUTION_CORE_README.md
+│   └── VEL_EXECUTION_DELIVERY_REPORT.md
+├── legacy_pdfs/                 # Archived PDF documentation
+│   ├── anvel_execution_controller.pdf
+│   ├── anvel_remote_executor.pdf
+│   ├── anvel_trade_validator.pdf
+│   ├── anvel_wallet_manager.pdf
+│   ├── dockercompose_production.pdf
+│   ├── vel_config_loader.pdf
+│   ├── vel_observability.pdf
+│   ├── vel_simulation_engine.pdf
+│   ├── vel_strategy_router.pdf
+│   └── vel_trade_ledger.pdf
 ├── cex_brokers/                 # Removed CEX broker modules
 │   ├── anvel_broker_coinbase.py
 │   └── anvel_broker_kraken.py
@@ -37,13 +62,11 @@ VEL_ARC/
 │   ├── anvel_saas_integration_example.py
 │   ├── anvel_operational_ledger.py
 │   └── btcpay_scanner.py
-├── overlapping_merged/          # Functionality merged into VEL modules
-│   ├── anvel_circuit_breaker.py  → merged into vel_circuit_breaker.py
-│   ├── anvel_risk_enhancement.py → merged into vel_risk_kernel.py
-│   ├── anvel_heartbeat_monitor.py → replaced by vel_health_server.py
-│   └── anvel_logging.py          → replaced by vel_structured_logging.py
-├── legacy_entry_points/         # Reserved for future archival
-└── deprecated_anvel_modules/    # Reserved for future archival
+└── overlapping_merged/          # Functionality merged into VEL modules
+    ├── anvel_circuit_breaker.py  → merged into vel_circuit_breaker.py
+    ├── anvel_risk_enhancement.py → merged into vel_risk_kernel.py
+    ├── anvel_heartbeat_monitor.py → replaced by vel_health_server.py
+    └── anvel_logging.py          → replaced by vel_structured_logging.py
 ```
 
 ## CEX Brokers Archive

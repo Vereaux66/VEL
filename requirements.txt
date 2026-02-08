@@ -3,9 +3,10 @@
 
 # Core Dependencies
 # Note: numpy and pandas are REQUIRED for AI/ML modules and data processing
-numpy==2.2.0
+# numpy version must be <2 for pandas 2.2.0 compatibility
+numpy==1.26.4
 pandas==2.2.0
-scipy==1.17.0
+scipy==1.14.1
 
 # Machine Learning & AI
 torch==2.6.0
