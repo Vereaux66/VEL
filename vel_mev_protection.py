@@ -20,6 +20,8 @@ Rules:
 NO SILENT FAILURES - All decisions are explicit and logged.
 """
 
+from __future__ import annotations
+
 import logging
 import os
 import threading
@@ -27,7 +29,10 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from enum import Enum
-from typing import Any, Dict, List, Optional, Set
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
+
+if TYPE_CHECKING:
+    from web3 import Web3
 
 logger = logging.getLogger(__name__)
 
