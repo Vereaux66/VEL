@@ -20,6 +20,8 @@ Rules:
 NO SILENT FAILURES - All decisions are explicit and logged.
 """
 
+from __future__ import annotations
+
 import logging
 import os
 import threading
@@ -27,7 +29,10 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from enum import Enum
-from typing import Any, Dict, List, Optional, Set
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
+
+if TYPE_CHECKING:
+    from web3 import Web3
 
 logger = logging.getLogger(__name__)
 
@@ -870,3 +875,560 @@ class MEVProtectionEngine:
                     "private_routing_enabled": self.config.enable_private_routing
                 }
             }
+
+
+# =============================================================================
+# FLASHBOTS INTEGRATION
+# =============================================================================
+
+@dataclass
+class FlashbotsConfig:
+    """Flashbots relay configuration."""
+    relay_url: str = "https://relay.flashbots.net"
+    signing_key: Optional[str] = None
+    max_block_age: int = 5  # Max blocks in the future to target
+    min_profit_wei: int = 0  # Minimum profit to submit bundle
+    simulation_enabled: bool = True
+    timeout_seconds: int = 10
+
+
+@dataclass
+class BundleSubmissionResult:
+    """Result of Flashbots bundle submission."""
+    bundle_hash: str
+    submitted_at: datetime
+    target_block: int
+    status: str
+    simulation_success: bool = False
+    simulation_error: Optional[str] = None
+    effective_gas_price: Optional[int] = None
+    coinbase_diff: Optional[int] = None
+
+
+class FlashbotsProvider:
+    """
+    Production-grade Flashbots integration for MEV protection.
+    
+    Features:
+    - Bundle creation and submission
+    - Bundle simulation before submission
+    - Multi-builder support
+    - Gas price optimization
+    - Transaction bundling
+    - Private transaction submission
+    """
+    
+    def __init__(self, config: Optional[FlashbotsConfig] = None):
+        """
+        Initialize Flashbots provider.
+        
+        Args:
+            config: Flashbots configuration
+        """
+        import os
+        from eth_account import Account
+        from eth_account.messages import encode_defunct
+        
+        self.config = config or FlashbotsConfig()
+        
+        # Initialize signing key
+        if self.config.signing_key:
+            self._signer = Account.from_key(self.config.signing_key)
+        else:
+            # Generate ephemeral signing key for Flashbots auth
+            self._signer = Account.create()
+        
+        self._builders = {
+            "flashbots": self.config.relay_url,
+            "bloxroute": "https://mev.api.blxrbdn.com",
+            "builder0x69": "https://builder0x69.io",
+            "rsync": "https://rsync-builder.xyz",
+        }
+        
+        logger.info(
+            "Flashbots provider initialized",
+            extra={"relay_url": self.config.relay_url}
+        )
+    
+    def create_bundle(
+        self,
+        transactions: List[Dict[str, Any]],
+        target_block: int,
+        replacement_uuid: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Create a Flashbots bundle.
+        
+        Args:
+            transactions: List of signed transaction dicts
+            target_block: Target block for inclusion
+            replacement_uuid: UUID for bundle replacement
+            
+        Returns:
+            Bundle object for submission
+        """
+        bundle = {
+            "txs": transactions,
+            "blockNumber": hex(target_block),
+        }
+        
+        if replacement_uuid:
+            bundle["replacementUuid"] = replacement_uuid
+        
+        return bundle
+    
+    def submit_bundle(
+        self,
+        bundle: Dict[str, Any],
+        w3: Web3,
+        simulate_first: bool = True
+    ) -> BundleSubmissionResult:
+        """
+        Submit bundle to Flashbots relay.
+        
+        Args:
+            bundle: Bundle to submit
+            w3: Web3 instance
+            simulate_first: Whether to simulate before submitting
+            
+        Returns:
+            BundleSubmissionResult
+        """
+        import json
+        import requests
+        from eth_account import Account
+        from eth_account.messages import encode_defunct
+        
+        target_block = int(bundle["blockNumber"], 16)
+        
+        # Simulate first if enabled
+        if simulate_first and self.config.simulation_enabled:
+            sim_result = self._simulate_bundle(bundle, w3)
+            if not sim_result["success"]:
+                return BundleSubmissionResult(
+                    bundle_hash="",
+                    submitted_at=datetime.now(timezone.utc),
+                    target_block=target_block,
+                    status="simulation_failed",
+                    simulation_success=False,
+                    simulation_error=sim_result.get("error")
+                )
+        
+        # Create signed payload
+        payload = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "eth_sendBundle",
+            "params": [bundle]
+        }
+        
+        body = json.dumps(payload)
+        message = encode_defunct(text=Web3.keccak(text=body).hex())
+        signature = self._signer.sign_message(message)
+        
+        headers = {
+            "Content-Type": "application/json",
+            "X-Flashbots-Signature": f"{self._signer.address}:{signature.signature.hex()}"
+        }
+        
+        try:
+            response = requests.post(
+                self.config.relay_url,
+                data=body,
+                headers=headers,
+                timeout=self.config.timeout_seconds
+            )
+            
+            result = response.json()
+            
+            if "error" in result:
+                return BundleSubmissionResult(
+                    bundle_hash="",
+                    submitted_at=datetime.now(timezone.utc),
+                    target_block=target_block,
+                    status="error",
+                    simulation_success=simulate_first,
+                    simulation_error=result["error"].get("message")
+                )
+            
+            bundle_hash = result.get("result", {}).get("bundleHash", "")
+            
+            return BundleSubmissionResult(
+                bundle_hash=bundle_hash,
+                submitted_at=datetime.now(timezone.utc),
+                target_block=target_block,
+                status="submitted",
+                simulation_success=simulate_first
+            )
+            
+        except Exception as e:
+            logger.error(f"Flashbots submission error: {e}")
+            return BundleSubmissionResult(
+                bundle_hash="",
+                submitted_at=datetime.now(timezone.utc),
+                target_block=target_block,
+                status="error",
+                simulation_error=str(e)
+            )
+    
+    def submit_private_transaction(
+        self,
+        signed_tx: bytes,
+        w3: Web3,
+        max_block_number: Optional[int] = None
+    ) -> BundleSubmissionResult:
+        """
+        Submit a private transaction (not visible in mempool).
+        
+        Args:
+            signed_tx: Signed transaction bytes
+            w3: Web3 instance
+            max_block_number: Maximum block for inclusion
+            
+        Returns:
+            BundleSubmissionResult
+        """
+        import json
+        import requests
+        from eth_account.messages import encode_defunct
+        
+        current_block = w3.eth.block_number
+        max_block = max_block_number or current_block + self.config.max_block_age
+        
+        payload = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "eth_sendPrivateTransaction",
+            "params": [{
+                "tx": signed_tx.hex() if isinstance(signed_tx, bytes) else signed_tx,
+                "maxBlockNumber": hex(max_block)
+            }]
+        }
+        
+        body = json.dumps(payload)
+        message = encode_defunct(text=Web3.keccak(text=body).hex())
+        signature = self._signer.sign_message(message)
+        
+        headers = {
+            "Content-Type": "application/json",
+            "X-Flashbots-Signature": f"{self._signer.address}:{signature.signature.hex()}"
+        }
+        
+        try:
+            response = requests.post(
+                self.config.relay_url,
+                data=body,
+                headers=headers,
+                timeout=self.config.timeout_seconds
+            )
+            
+            result = response.json()
+            
+            if "error" in result:
+                return BundleSubmissionResult(
+                    bundle_hash="",
+                    submitted_at=datetime.now(timezone.utc),
+                    target_block=max_block,
+                    status="error",
+                    simulation_error=result["error"].get("message")
+                )
+            
+            tx_hash = result.get("result", "")
+            
+            return BundleSubmissionResult(
+                bundle_hash=tx_hash,
+                submitted_at=datetime.now(timezone.utc),
+                target_block=max_block,
+                status="submitted"
+            )
+            
+        except Exception as e:
+            logger.error(f"Private transaction error: {e}")
+            return BundleSubmissionResult(
+                bundle_hash="",
+                submitted_at=datetime.now(timezone.utc),
+                target_block=max_block,
+                status="error",
+                simulation_error=str(e)
+            )
+    
+    def _simulate_bundle(
+        self,
+        bundle: Dict[str, Any],
+        w3: Web3
+    ) -> Dict[str, Any]:
+        """Simulate bundle before submission."""
+        import json
+        import requests
+        from eth_account.messages import encode_defunct
+        
+        payload = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "eth_callBundle",
+            "params": [bundle]
+        }
+        
+        body = json.dumps(payload)
+        message = encode_defunct(text=Web3.keccak(text=body).hex())
+        signature = self._signer.sign_message(message)
+        
+        headers = {
+            "Content-Type": "application/json",
+            "X-Flashbots-Signature": f"{self._signer.address}:{signature.signature.hex()}"
+        }
+        
+        try:
+            response = requests.post(
+                self.config.relay_url,
+                data=body,
+                headers=headers,
+                timeout=self.config.timeout_seconds
+            )
+            
+            result = response.json()
+            
+            if "error" in result:
+                return {"success": False, "error": result["error"].get("message")}
+            
+            sim_result = result.get("result", {})
+            
+            # Check if any transaction reverted
+            for tx_result in sim_result.get("results", []):
+                if tx_result.get("error"):
+                    return {"success": False, "error": tx_result.get("error")}
+            
+            return {
+                "success": True,
+                "coinbase_diff": sim_result.get("coinbaseDiff"),
+                "gas_used": sim_result.get("totalGasUsed"),
+                "effective_gas_price": sim_result.get("bundleGasPrice")
+            }
+            
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
+    def submit_to_builders(
+        self,
+        bundle: Dict[str, Any],
+        w3: Web3,
+        builders: Optional[List[str]] = None
+    ) -> Dict[str, BundleSubmissionResult]:
+        """
+        Submit bundle to multiple builders for better inclusion chance.
+        
+        Args:
+            bundle: Bundle to submit
+            w3: Web3 instance
+            builders: List of builder names (uses all if not specified)
+            
+        Returns:
+            Dict of builder name to submission result
+        """
+        import concurrent.futures
+        
+        target_builders = builders or list(self._builders.keys())
+        results = {}
+        
+        def submit_to_builder(builder_name: str) -> Tuple[str, BundleSubmissionResult]:
+            original_url = self.config.relay_url
+            try:
+                self.config.relay_url = self._builders.get(
+                    builder_name, self.config.relay_url
+                )
+                result = self.submit_bundle(bundle, w3, simulate_first=False)
+                return builder_name, result
+            finally:
+                self.config.relay_url = original_url
+        
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(target_builders)) as executor:
+            futures = {
+                executor.submit(submit_to_builder, builder): builder
+                for builder in target_builders
+            }
+            
+            for future in concurrent.futures.as_completed(futures):
+                try:
+                    builder_name, result = future.result()
+                    results[builder_name] = result
+                except Exception as e:
+                    builder_name = futures[future]
+                    results[builder_name] = BundleSubmissionResult(
+                        bundle_hash="",
+                        submitted_at=datetime.now(timezone.utc),
+                        target_block=int(bundle["blockNumber"], 16),
+                        status="error",
+                        simulation_error=str(e)
+                    )
+        
+        return results
+
+
+# =============================================================================
+# GAS ESCALATION STRATEGY
+# =============================================================================
+
+@dataclass
+class GasEscalationConfig:
+    """Configuration for gas price escalation."""
+    initial_multiplier: Decimal = Decimal("1.1")  # 10% above base
+    max_multiplier: Decimal = Decimal("2.0")  # Max 2x base
+    escalation_step: Decimal = Decimal("0.1")  # 10% per step
+    escalation_interval_seconds: int = 15  # Every 15 seconds
+    max_escalations: int = 10  # Maximum escalation attempts
+
+
+class GasEscalationStrategy:
+    """
+    Production-grade gas price escalation for stuck transactions.
+    
+    Features:
+    - Automatic gas price escalation for pending transactions
+    - Configurable escalation curve
+    - Transaction replacement with higher gas
+    - Priority fee optimization
+    """
+    
+    def __init__(self, config: Optional[GasEscalationConfig] = None):
+        """
+        Initialize gas escalation strategy.
+        
+        Args:
+            config: Escalation configuration
+        """
+        self.config = config or GasEscalationConfig()
+        self._pending_escalations: Dict[str, Dict[str, Any]] = {}
+        self._lock = threading.Lock()
+        
+        logger.info("Gas escalation strategy initialized")
+    
+    def calculate_escalated_gas(
+        self,
+        base_fee: int,
+        priority_fee: int,
+        escalation_count: int
+    ) -> Tuple[int, int]:
+        """
+        Calculate escalated gas prices.
+        
+        Args:
+            base_fee: Current base fee
+            priority_fee: Current priority fee
+            escalation_count: Number of escalations so far
+            
+        Returns:
+            Tuple of (max_fee_per_gas, max_priority_fee_per_gas)
+        """
+        multiplier = min(
+            self.config.initial_multiplier + (
+                self.config.escalation_step * Decimal(escalation_count)
+            ),
+            self.config.max_multiplier
+        )
+        
+        # Escalate both base fee and priority fee
+        new_max_fee = int(Decimal(base_fee * 2 + priority_fee) * multiplier)
+        new_priority_fee = int(Decimal(priority_fee) * multiplier)
+        
+        return new_max_fee, new_priority_fee
+    
+    def track_for_escalation(
+        self,
+        tx_hash: str,
+        chain_id: int,
+        wallet_address: str,
+        nonce: int,
+        original_gas_price: int,
+        signed_tx_data: bytes
+    ) -> None:
+        """
+        Track a transaction for potential escalation.
+        
+        Args:
+            tx_hash: Original transaction hash
+            chain_id: Chain ID
+            wallet_address: Wallet address
+            nonce: Transaction nonce
+            original_gas_price: Original gas price
+            signed_tx_data: Original signed transaction data
+        """
+        with self._lock:
+            self._pending_escalations[tx_hash] = {
+                "chain_id": chain_id,
+                "wallet_address": wallet_address,
+                "nonce": nonce,
+                "original_gas_price": original_gas_price,
+                "signed_tx_data": signed_tx_data,
+                "escalation_count": 0,
+                "submitted_at": datetime.now(timezone.utc),
+                "last_escalation": None
+            }
+        
+        logger.info(
+            f"Tracking transaction {tx_hash} for escalation",
+            extra={"tx_hash": tx_hash, "nonce": nonce}
+        )
+    
+    def should_escalate(self, tx_hash: str) -> bool:
+        """
+        Check if a transaction should be escalated.
+        
+        Args:
+            tx_hash: Transaction hash
+            
+        Returns:
+            True if should escalate
+        """
+        with self._lock:
+            if tx_hash not in self._pending_escalations:
+                return False
+            
+            record = self._pending_escalations[tx_hash]
+            
+            # Check max escalations
+            if record["escalation_count"] >= self.config.max_escalations:
+                return False
+            
+            # Check time since last escalation
+            last = record["last_escalation"] or record["submitted_at"]
+            elapsed = (datetime.now(timezone.utc) - last).total_seconds()
+            
+            return elapsed >= self.config.escalation_interval_seconds
+    
+    def record_escalation(self, tx_hash: str, new_tx_hash: str) -> None:
+        """
+        Record that an escalation was performed.
+        
+        Args:
+            tx_hash: Original transaction hash
+            new_tx_hash: New transaction hash
+        """
+        with self._lock:
+            if tx_hash in self._pending_escalations:
+                record = self._pending_escalations[tx_hash]
+                record["escalation_count"] += 1
+                record["last_escalation"] = datetime.now(timezone.utc)
+                record["replacement_hash"] = new_tx_hash
+                
+                logger.info(
+                    f"Escalation recorded: {tx_hash} -> {new_tx_hash} "
+                    f"(attempt {record['escalation_count']})"
+                )
+    
+    def complete_escalation(self, tx_hash: str) -> None:
+        """
+        Mark escalation as complete (transaction confirmed).
+        
+        Args:
+            tx_hash: Transaction hash
+        """
+        with self._lock:
+            self._pending_escalations.pop(tx_hash, None)
+    
+    def get_pending_escalations(self) -> List[str]:
+        """Get list of transactions pending escalation."""
+        with self._lock:
+            return [
+                tx_hash for tx_hash, record in self._pending_escalations.items()
+                if self.should_escalate(tx_hash)
+            ]
