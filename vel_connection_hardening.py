@@ -53,6 +53,11 @@ class ConnectionType(Enum):
     INTERNAL = "internal"
 
 
+# Health thresholds (configurable)
+DEFAULT_MAX_CONSECUTIVE_FAILURES = 3
+DEFAULT_MIN_SUCCESS_RATE = 0.95
+
+
 @dataclass
 class ConnectionHealth:
     """Health metrics for a connection."""
@@ -67,6 +72,9 @@ class ConnectionHealth:
     total_requests: int = 0
     successful_requests: int = 0
     metadata: Dict[str, Any] = field(default_factory=dict)
+    # Configurable thresholds
+    max_consecutive_failures: int = DEFAULT_MAX_CONSECUTIVE_FAILURES
+    min_success_rate: float = DEFAULT_MIN_SUCCESS_RATE
     
     def success_rate(self) -> float:
         """Calculate success rate."""
@@ -78,8 +86,8 @@ class ConnectionHealth:
         """Check if connection is healthy."""
         return (
             self.state == ConnectionState.CONNECTED and
-            self.consecutive_failures < 3 and
-            self.success_rate() >= 0.95
+            self.consecutive_failures < self.max_consecutive_failures and
+            self.success_rate() >= self.min_success_rate
         )
 
 
@@ -96,6 +104,9 @@ class ConnectionConfig:
     health_check_interval_seconds: float = 30.0
     auto_reconnect: bool = True
     verify_ssl: bool = True
+    # Health thresholds
+    max_consecutive_failures: int = DEFAULT_MAX_CONSECUTIVE_FAILURES
+    min_success_rate: float = DEFAULT_MIN_SUCCESS_RATE
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
