@@ -23,7 +23,7 @@ import time
 from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from decimal import Decimal
 from enum import Enum
 from typing import Any, AsyncIterator, Dict, Iterator, List, Optional, Tuple
@@ -134,6 +134,9 @@ class SQLiteBackend(StorageBackend):
         
         self._connection = await aiosqlite.connect(self.config.sqlite_path)
         
+        # Set row factory once during connection
+        self._connection.row_factory = aiosqlite.Row
+        
         # Enable WAL mode
         if self.config.sqlite_wal_mode:
             await self._connection.execute("PRAGMA journal_mode=WAL")
@@ -157,7 +160,6 @@ class SQLiteBackend(StorageBackend):
     
     async def fetch_one(self, query: str, params: Optional[tuple] = None) -> Optional[Dict]:
         """Fetch one row."""
-        self._connection.row_factory = aiosqlite.Row
         cursor = await self._connection.execute(query, params or ())
         row = await cursor.fetchone()
         if row:
@@ -166,7 +168,6 @@ class SQLiteBackend(StorageBackend):
     
     async def fetch_all(self, query: str, params: Optional[tuple] = None) -> List[Dict]:
         """Fetch all rows."""
-        self._connection.row_factory = aiosqlite.Row
         cursor = await self._connection.execute(query, params or ())
         rows = await cursor.fetchall()
         return [dict(row) for row in rows]
@@ -812,10 +813,6 @@ class StorageManager:
                 seq_num
             )
         )
-
-
-# Need to import timedelta
-from datetime import timedelta
 
 
 # =============================================================================

@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 from decimal import Decimal
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import FastAPI, HTTPException, Depends, Header, Request, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -230,7 +230,7 @@ async def verify_jwt(authorization: str = Header(...)) -> Dict[str, Any]:
         )
 
 
-def create_jwt_token(wallet_address: str) -> tuple[str, datetime]:
+def create_jwt_token(wallet_address: str) -> Tuple[str, datetime]:
     """Create JWT token for wallet."""
     expires = datetime.now(timezone.utc) + timedelta(hours=api_config.jwt_expiry_hours)
     
