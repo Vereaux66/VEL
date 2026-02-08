@@ -53,19 +53,26 @@ jobs:
           pip install black pylint mypy bandit
 
       - name: Run Black (code formatter check)
-        run: black --check --diff .
-        continue-on-error: true
+        run: black --check --diff . || echo "::warning::Code formatting issues found. Run 'black .' to fix."
 
       - name: Run Pylint
         run: |
-          pylint --rcfile=.pylintrc *.py runtime/*.py || true
-        continue-on-error: true
+          pylint --rcfile=.pylintrc *.py runtime/*.py --exit-zero --output-format=parseable | tee pylint-report.txt
+          # Fail if critical errors (E or F codes)
+          if grep -E "^[^:]+:[0-9]+:[0-9]+: [EF][0-9]+" pylint-report.txt; then
+            echo "::error::Critical pylint errors found"
+            exit 1
+          fi
 
       - name: Run Bandit (security linter)
         run: |
-          bandit -r . -x ./tests,./frontend -f json -o bandit-report.json || true
-          bandit -r . -x ./tests,./frontend -ll
-        continue-on-error: true
+          bandit -r . -x ./tests,./frontend,./VEL_ARC -f json -o bandit-report.json
+          # Fail on high severity issues
+          if bandit -r . -x ./tests,./frontend,./VEL_ARC -ll --exit-zero | grep -E "Severity: High"; then
+            echo "::error::High severity security issues found"
+            exit 1
+          fi
+          bandit -r . -x ./tests,./frontend,./VEL_ARC -ll
 
       - name: Enforce DEX-only policy (no CEX modules)
         run: |
@@ -166,6 +173,7 @@ jobs:
             --cov=. \
             --cov-report=xml \
             --cov-report=html \
+            --cov-fail-under=60 \
             --junitxml=test-results.xml
 
       - name: Upload test results
@@ -205,15 +213,15 @@ jobs:
       - name: Run pip-audit (dependency vulnerabilities)
         run: |
           pip install pip-audit
-          pip-audit -r requirements.txt --format json --output pip-audit.json || true
-          pip-audit -r requirements.txt || true
+          pip-audit -r requirements.txt --format json --output pip-audit.json
+          # Fail on known vulnerabilities
+          pip-audit -r requirements.txt
 
       - name: Run Safety check
         run: |
           pip install safety
-          safety check -r requirements.txt --json --output safety-report.json || true
-          safety check -r requirements.txt || true
-        continue-on-error: true
+          safety check -r requirements.txt --json --output safety-report.json
+          safety check -r requirements.txt
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
@@ -222,20 +230,19 @@ jobs:
           scan-ref: '.'
           format: 'sarif'
           output: 'trivy-results.sarif'
-        continue-on-error: true
+          severity: 'HIGH,CRITICAL'
+          exit-code: '1'
 
       - name: Upload Trivy results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
           sarif_file: 'trivy-results.sarif'
-        continue-on-error: true
 
       - name: Run Gitleaks (secret detection)
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        continue-on-error: true
 
       - name: Upload security reports
         uses: actions/upload-artifact@v4
@@ -331,14 +338,14 @@ jobs:
           input: /tmp/vel-image.tar
           format: 'sarif'
           output: 'trivy-image.sarif'
-        continue-on-error: true
+          severity: 'HIGH,CRITICAL'
+          exit-code: '1'
 
       - name: Upload container scan results
         uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
           sarif_file: 'trivy-image.sarif'
-        continue-on-error: true
 
       - name: Upload Docker image artifact
         uses: actions/upload-artifact@v4

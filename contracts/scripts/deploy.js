@@ -130,6 +130,37 @@ async function main() {
   deployedContracts.VELAnonymousOrderExecutor = anonymousExecutorAddress;
   console.log("✓ VELAnonymousOrderExecutor deployed to:", anonymousExecutorAddress);
   
+  // 7. Deploy VELAddressRegistry
+  console.log("\n7. Deploying VELAddressRegistry...");
+  const VELAddressRegistry = await hre.ethers.getContractFactory("VELAddressRegistry");
+  const registry = await VELAddressRegistry.deploy(deployer.address);
+  await registry.waitForDeployment();
+  const registryAddress = await registry.getAddress();
+  deployedContracts.VELAddressRegistry = registryAddress;
+  console.log("✓ VELAddressRegistry deployed to:", registryAddress);
+  
+  // Register all contracts in the registry
+  console.log("\nRegistering contracts in registry...");
+  
+  const contractsToRegister = [
+    { id: await registry.MULTI_DEX_ROUTER(), address: routerAddress, desc: "Multi-DEX Router" },
+    { id: await registry.POOLED_VAULT(), address: vaultAddress, desc: "Pooled Trading Vault" },
+    { id: await registry.CROSSCHAIN_BRIDGE(), address: bridgeAddress, desc: "Cross-chain Bridge" },
+    { id: await registry.ATOMIC_SWAP_HTLC(), address: htlcAddress, desc: "Atomic Swap HTLC" },
+    { id: await registry.ANONYMOUS_EXECUTOR(), address: anonymousExecutorAddress, desc: "Anonymous Order Executor" },
+    { id: await registry.TRADE_EXECUTOR(), address: executorAddress, desc: "Trade Executor" },
+  ];
+  
+  for (const contract of contractsToRegister) {
+    try {
+      const tx = await registry.registerContract(contract.id, contract.address, contract.desc);
+      await tx.wait();
+      console.log(`✓ Registered: ${contract.desc}`);
+    } catch (error) {
+      console.log(`⚠ Failed to register ${contract.desc}:`, error.message);
+    }
+  }
+  
   // Get deployment transaction for VELTradeExecutor (for gas info)
   const deployTx = executor.deploymentTransaction();
   console.log("\n  Sample Transaction hash:", deployTx.hash);
@@ -251,6 +282,7 @@ async function main() {
   console.log("VELCrosschainBridge:     ", bridgeAddress);
   console.log("VELAtomicSwapHTLC:       ", htlcAddress);
   console.log("VELAnonymousOrderExecutor:", anonymousExecutorAddress);
+  console.log("VELAddressRegistry:      ", registryAddress);
   console.log("Owner:", deployer.address);
   console.log("Network:", network.name);
   console.log("═".repeat(60));
