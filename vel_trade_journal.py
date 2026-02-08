@@ -348,15 +348,23 @@ class ImmutableTradeJournal:
         
         conn = sqlite3.connect(self._db_path)
         try:
-            end_clause = f"AND sequence_number <= {end_seq}" if end_seq else ""
-            cursor = conn.execute(f"""
-                SELECT entry_id, sequence_number, entry_type, timestamp,
-                       user_id, data, previous_hash, entry_hash
-                FROM journal_entries 
-                WHERE sequence_number >= ?
-                {end_clause}
-                ORDER BY sequence_number ASC
-            """, (start_seq,))
+            # Use parameterized query to avoid SQL injection
+            if end_seq is not None:
+                cursor = conn.execute("""
+                    SELECT entry_id, sequence_number, entry_type, timestamp,
+                           user_id, data, previous_hash, entry_hash
+                    FROM journal_entries 
+                    WHERE sequence_number >= ? AND sequence_number <= ?
+                    ORDER BY sequence_number ASC
+                """, (start_seq, end_seq))
+            else:
+                cursor = conn.execute("""
+                    SELECT entry_id, sequence_number, entry_type, timestamp,
+                           user_id, data, previous_hash, entry_hash
+                    FROM journal_entries 
+                    WHERE sequence_number >= ?
+                    ORDER BY sequence_number ASC
+                """, (start_seq,))
             
             expected_previous = "0" * 64 if start_seq == 1 else None
             

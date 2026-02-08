@@ -53,7 +53,9 @@ jobs:
           pip install black pylint mypy bandit
 
       - name: Run Black (code formatter check)
-        run: black --check --diff . || echo "::warning::Code formatting issues found. Run 'black .' to fix."
+        run: |
+          # Black formatting check - fail on violations
+          black --check --diff .
 
       - name: Run Pylint
         run: |
@@ -169,6 +171,10 @@ jobs:
           REDIS_HOST: localhost
           REDIS_PORT: 6379
         run: |
+          # Coverage threshold rationale:
+          # - 60% is the baseline for production systems
+          # - Covers core execution paths while allowing incremental improvement
+          # - Target: Increase to 80% over next 3 releases
           python -m pytest tests/ -v \
             --cov=. \
             --cov-report=xml \

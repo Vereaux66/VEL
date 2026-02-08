@@ -759,7 +759,7 @@ class UnifiedBootManager:
             # Phase 11: Print runtime capability matrix
             self._print_capability_matrix(components_online)
             
-            # Phase 12: Startup self-test (dry run)
+            # Phase 12: Startup self-test
             if not self._run_startup_selftest():
                 return self._fail_boot(components_online, components_failed)
             
