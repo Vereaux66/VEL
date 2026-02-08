@@ -4753,20 +4753,18 @@ if _brain_blocker is None:
     anvel_brain = AnvelBrain()
     _brain_logger.info("ANVEL Brain initialized successfully (full functionality)")
 else:
-    # AUTONOMOUS MODE: Still create the brain but log critical warning
-    _brain_logger.error(
-        "CRITICAL: Some dependencies still missing after auto-install: %s",
+    # NO STUBS - Hard fail on missing dependencies
+    _brain_logger.critical(
+        "FATAL: Required dependencies missing: %s",
         _brain_blocker,
     )
-    _brain_logger.error(
-        "ANVEL Brain will have limited functionality. Manual installation required."
+    _brain_logger.critical(
+        "ANVEL Brain CANNOT start without all dependencies. "
+        "Install missing packages or the system will not boot."
     )
-    # Create brain anyway - let it fail at runtime if needed
-    try:
-        anvel_brain = AnvelBrain()
-    except Exception as e:
-        _brain_logger.error(f"Brain instantiation failed: {e}")
-        anvel_brain = _BrainUnavailable(_brain_blocker)
+    # Attempt to create brain - if it fails, let the exception propagate
+    # This ensures NO silent degradation
+    anvel_brain = AnvelBrain()  # Will raise if dependencies truly missing
 
 if __name__ == "__main__":
     parser = _build_cli_parser()

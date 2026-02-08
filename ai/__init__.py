@@ -10,52 +10,74 @@ Modules:
 - learning: Continuous Learning System
 - self_repair: Self-repair and Auto-healing
 - introspection: System introspection and analysis
+
+NO STUBS - All modules must be present and functional.
+If any module fails to load, boot will fail immediately.
 """
 
 import logging
+import sys
 
-# Core imports with fallback for missing dependencies
-try:
-    from .core import (
-        AISupervisor,
-        TrainingEngine,
-        SystemHealthMonitor,
-        AIMetrics,
-        SecureKnowledge,
-        SystemHealth,
-    )
-except ImportError as e:
-    logging.getLogger("ai").warning(f"Core AI module import error: {e}")
+logger = logging.getLogger("ai")
+
+# Import errors are FATAL - no stubs allowed
+# This ensures all AI components are fully operational
+
+from .core import (
+    AISupervisor,
+    TrainingEngine,
+    SystemHealthMonitor,
+    AIMetrics,
+    SecureKnowledge,
+    SystemHealth,
+)
+
+from .learning import ContinuousLearningSystem
+
+from .self_repair import SelfRepairEngine
+
+from .introspection import IntrospectionEngine
+
+
+def validate_ai_modules() -> bool:
+    """
+    Validate all AI modules are properly loaded and functional.
     
-    # Provide stubs
-    class AISupervisor:
-        def __init__(self, **kwargs): pass
-        def start(self): pass
-        def stop(self): pass
+    Returns:
+        True if all modules are valid
+        
+    Raises:
+        ImportError: If any required module is missing
+        RuntimeError: If any module fails validation
+    """
+    required_classes = [
+        ("AISupervisor", AISupervisor),
+        ("TrainingEngine", TrainingEngine),
+        ("SystemHealthMonitor", SystemHealthMonitor),
+        ("ContinuousLearningSystem", ContinuousLearningSystem),
+        ("SelfRepairEngine", SelfRepairEngine),
+        ("IntrospectionEngine", IntrospectionEngine),
+    ]
     
-    class TrainingEngine:
-        def __init__(self, **kwargs): pass
+    for name, cls in required_classes:
+        if cls is None:
+            raise RuntimeError(f"AI module {name} is None - system cannot start")
+        
+        # Verify class has required methods
+        if not callable(getattr(cls, "__init__", None)):
+            raise RuntimeError(f"AI module {name} missing __init__ - invalid class")
     
-    class SystemHealthMonitor:
-        def __init__(self, **kwargs): pass
+    logger.info("AI module validation passed - all modules operational")
+    return True
 
-try:
-    from .learning import ContinuousLearningSystem
-except ImportError:
-    class ContinuousLearningSystem:
-        def __init__(self, **kwargs): pass
 
+# Run validation on import
 try:
-    from .self_repair import SelfRepairEngine
-except ImportError:
-    class SelfRepairEngine:
-        def __init__(self, **kwargs): pass
-
-try:
-    from .introspection import IntrospectionEngine
-except ImportError:
-    class IntrospectionEngine:
-        def __init__(self, **kwargs): pass
+    validate_ai_modules()
+except Exception as e:
+    logger.critical(f"AI MODULE VALIDATION FAILED: {e}")
+    logger.critical("System cannot start without all AI modules operational")
+    raise
 
 
 __all__ = [
@@ -68,4 +90,5 @@ __all__ = [
     "ContinuousLearningSystem",
     "SelfRepairEngine",
     "IntrospectionEngine",
+    "validate_ai_modules",
 ]
