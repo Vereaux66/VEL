@@ -181,7 +181,9 @@ class ManagedConnection(ABC):
         self.health = ConnectionHealth(
             connection_id=self._generate_id(),
             connection_type=config.connection_type,
-            state=ConnectionState.DISCONNECTED
+            state=ConnectionState.DISCONNECTED,
+            max_consecutive_failures=config.max_consecutive_failures,
+            min_success_rate=config.min_success_rate
         )
         self._lock = threading.RLock()
         self._reconnect_thread: Optional[threading.Thread] = None

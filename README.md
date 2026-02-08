@@ -1,7 +1,7 @@
 # VEL - Enterprise DeFi Trading Platform
 
 [![CI/CD Pipeline](https://github.com/Vereaux66/VEL/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/Vereaux66/VEL/actions)
-[![Tests](https://img.shields.io/badge/tests-174%20passed-brightgreen.svg)](#-testing)
+[![Tests](https://img.shields.io/badge/tests-174%20passed-brightgreen.svg)](#testing)
 [![Security](https://img.shields.io/badge/security-military--grade-green.svg)](SECURITY.md)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
