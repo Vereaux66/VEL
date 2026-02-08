@@ -61,8 +61,11 @@ python run.py
 ### Launch Options
 
 ```bash
-# Validate prerequisites only (no launch)
-python run.py --validate-only
+# Standard boot (recommended)
+python run.py
+
+# Validate configuration without starting (dry run)
+python run.py --dry-run
 
 # Show all options
 python run.py --help
@@ -170,14 +173,9 @@ VEL/
 │   ├── test_trade_lifecycle.py
 │   └── test_infrastructure.py
 │
-├── .github/
-│   └── workflows/
-│       └── ci-cd.yml         # CI/CD pipeline
-│
-└── VEL_ARC/                  # Archive (deprecated code)
-    ├── docs_archive/         # Archived documentation
-    ├── legacy_pdfs/          # Archived PDFs
-    └── cex_brokers/          # Archived CEX modules
+└── .github/
+    └── workflows/
+        └── ci-cd.yml         # CI/CD pipeline
 ```
 
 ## 🔐 Security

@@ -380,16 +380,40 @@ async def authenticate(request: TokenRequest):
     
     The signature must be a valid signature of the message by the wallet.
     """
-    # In production, verify the signature against the message
-    # For now, just create the token
     try:
-        # TODO: Add actual signature verification
-        # from eth_account.messages import encode_defunct
-        # from eth_account import Account
-        # message = encode_defunct(text=request.message)
-        # signer = Account.recover_message(message, signature=request.signature)
-        # if signer.lower() != request.wallet_address.lower():
-        #     raise HTTPException(status_code=401, detail="Invalid signature")
+        # Verify Ethereum signature
+        from eth_account.messages import encode_defunct
+        from eth_account import Account
+        
+        # Validate signature format (basic check for hex string)
+        sig = request.signature
+        if not sig.startswith('0x'):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid signature format: must start with '0x'"
+            )
+        if len(sig) != 132:  # 0x + 130 hex chars (65 bytes)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid signature format: incorrect length"
+            )
+        
+        try:
+            message = encode_defunct(text=request.message)
+            recovered_address = Account.recover_message(message, signature=request.signature)
+        except Exception as e:
+            logger.error(f"Signature recovery failed: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid signature: could not recover address"
+            )
+        
+        # Verify the recovered address matches the claimed wallet
+        if recovered_address.lower() != request.wallet_address.lower():
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid signature: recovered address does not match wallet"
+            )
         
         token, expires = create_jwt_token(request.wallet_address)
         
@@ -398,7 +422,33 @@ async def authenticate(request: TokenRequest):
             expires_at=expires
         )
         
+    except HTTPException:
+        raise
+    except ImportError:
+        # eth_account not installed - only allow in development
+        environment = os.getenv("VEL_ENVIRONMENT", "development").lower()
+        if environment == "production":
+            logger.error(
+                "SECURITY: eth_account not installed in production - "
+                "signature verification unavailable. Failing closed."
+            )
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Authentication service temporarily unavailable"
+            )
+        # Development/testing only - proceed without verification
+        logger.warning(
+            "eth_account not installed - signature verification skipped. "
+            "This is only allowed in non-production environments. "
+            "Install with: pip install eth-account"
+        )
+        token, expires = create_jwt_token(request.wallet_address)
+        return TokenResponse(
+            access_token=token,
+            expires_at=expires
+        )
     except Exception as e:
+        logger.error(f"Authentication failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"Authentication failed: {e}"

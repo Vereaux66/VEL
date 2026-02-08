@@ -427,6 +427,26 @@ class CloudHSMSigner(HardwareSignerPlugin):
         self.key_label = key_label
         self.region = region
         self._session = None
+        # Configurable PKCS#11 library path via environment variable
+        self._pkcs11_lib_path = os.getenv(
+            "VEL_PKCS11_LIB_PATH",
+            "/opt/cloudhsm/lib/libcloudhsm_pkcs11.so"
+        )
+    
+    def _get_hsm_pin(self) -> str:
+        """
+        Get HSM PIN from environment variable.
+        
+        Raises:
+            RuntimeError: If VEL_HSM_PIN environment variable is not set
+        """
+        hsm_pin = os.getenv("VEL_HSM_PIN")
+        if not hsm_pin:
+            raise RuntimeError(
+                "VEL_HSM_PIN environment variable must be set for CloudHSM operations. "
+                "This is required for secure HSM authentication."
+            )
+        return hsm_pin
     
     def connect(self) -> bool:
         """Connect to CloudHSM cluster."""
@@ -452,20 +472,149 @@ class CloudHSMSigner(HardwareSignerPlugin):
         tx_data: bytes,
         derivation_path: str = "m/44'/60'/0'/0/0"
     ) -> bytes:
-        """Sign transaction using CloudHSM."""
+        """
+        Sign transaction using CloudHSM via PKCS#11.
+        
+        Requires AWS CloudHSM Client and PKCS#11 library to be installed
+        and configured on the system.
+        
+        For Ethereum transactions, callers should pass the pre-computed
+        Keccak-256 hash of the transaction (32 bytes). If raw transaction
+        data is passed, this method will compute the Keccak-256 hash.
+        
+        Environment Variables:
+            VEL_HSM_PIN: Required - HSM PIN for authentication
+            VEL_PKCS11_LIB_PATH: Optional - Path to PKCS#11 library
+        
+        Args:
+            tx_data: Transaction data or pre-computed hash to sign.
+                     For Ethereum compatibility, pass the 32-byte Keccak-256 hash
+                     of the transaction, or raw data which will be hashed.
+            derivation_path: BIP44 derivation path (used for key selection)
+            
+        Returns:
+            ECDSA signature bytes (r || s format, 64 bytes).
+            Note: For Ethereum transactions, callers must add recovery id (v)
+            to construct the full (v, r, s) signature.
+            
+        Raises:
+            RuntimeError: If not connected to CloudHSM or PIN not set
+            ImportError: If PKCS#11 library not available
+        """
         if not self._connected:
             raise RuntimeError("Not connected to CloudHSM")
         
-        # In production, this would use the PKCS#11 interface
-        # to sign with the HSM key
-        raise NotImplementedError("CloudHSM signing requires PKCS#11 setup")
+        # Validate HSM PIN is set
+        hsm_pin = self._get_hsm_pin()
+        
+        try:
+            # Attempt to use PKCS#11 for signing
+            from pkcs11 import lib, Mechanism, KeyType, ObjectClass
+            from pkcs11.util.ec import encode_ec_public_key
+            
+            # Load PKCS#11 library (configurable via environment variable)
+            pkcs11_lib = lib(self._pkcs11_lib_path)
+            
+            # Get token and open session
+            token = pkcs11_lib.get_token(token_label=self.key_label)
+            with token.open(user_pin=hsm_pin) as session:
+                # Find the private key
+                private_key = session.get_key(
+                    key_type=KeyType.EC,
+                    object_class=ObjectClass.PRIVATE_KEY,
+                    label=self.key_label
+                )
+                
+                # Determine if tx_data is already a hash (32 bytes) or needs hashing
+                if len(tx_data) == 32:
+                    # Assume pre-computed hash (caller should use Keccak-256)
+                    tx_hash = tx_data
+                else:
+                    # Hash with Keccak-256 for Ethereum compatibility
+                    try:
+                        from eth_hash.auto import keccak
+                        tx_hash = keccak(tx_data)
+                    except ImportError:
+                        # Fallback: use hashlib's sha3_256 (note: not identical to Keccak-256)
+                        # Warn user to install eth-hash for true Ethereum compatibility
+                        logger.warning(
+                            "eth-hash not installed - using SHA3-256 instead of Keccak-256. "
+                            "For Ethereum compatibility, install: pip install eth-hash[pycryptodome]"
+                        )
+                        tx_hash = hashlib.sha3_256(tx_data).digest()
+                
+                # Sign using ECDSA
+                signature = private_key.sign(tx_hash, mechanism=Mechanism.ECDSA)
+                
+                logger.info("Transaction signed using CloudHSM")
+                return bytes(signature)
+                
+        except ImportError as e:
+            if "pkcs11" in str(e).lower():
+                logger.error("PKCS#11 library not available. Install with: pip install python-pkcs11")
+                raise ImportError(
+                    "CloudHSM signing requires PKCS#11 library. "
+                    "Install: pip install python-pkcs11"
+                )
+            raise
+        except Exception as e:
+            logger.error(f"CloudHSM signing failed: {e}")
+            raise RuntimeError(f"CloudHSM signing failed: {e}")
     
     def get_public_key(self, derivation_path: str = "m/44'/60'/0'/0/0") -> str:
-        """Get public key from CloudHSM."""
+        """
+        Get public key from CloudHSM via PKCS#11.
+        
+        Environment Variables:
+            VEL_HSM_PIN: Required - HSM PIN for authentication
+            VEL_PKCS11_LIB_PATH: Optional - Path to PKCS#11 library
+        
+        Args:
+            derivation_path: BIP44 derivation path (used for key selection)
+            
+        Returns:
+            Public key as hex string
+            
+        Raises:
+            RuntimeError: If not connected to CloudHSM or PIN not set
+            ImportError: If PKCS#11 library not available
+        """
         if not self._connected:
             raise RuntimeError("Not connected to CloudHSM")
         
-        raise NotImplementedError("CloudHSM key retrieval requires PKCS#11 setup")
+        # Validate HSM PIN is set
+        hsm_pin = self._get_hsm_pin()
+        
+        try:
+            from pkcs11 import lib, KeyType, ObjectClass
+            from pkcs11.util.ec import encode_ec_public_key
+            
+            # Load PKCS#11 library (configurable via environment variable)
+            pkcs11_lib = lib(self._pkcs11_lib_path)
+            
+            # Get token and open session
+            token = pkcs11_lib.get_token(token_label=self.key_label)
+            with token.open(user_pin=hsm_pin) as session:
+                # Find the public key
+                public_key = session.get_key(
+                    key_type=KeyType.EC,
+                    object_class=ObjectClass.PUBLIC_KEY,
+                    label=self.key_label
+                )
+                
+                # Encode and return as hex
+                encoded = encode_ec_public_key(public_key)
+                return encoded.hex()
+                
+        except ImportError:
+            logger.error("PKCS#11 library not available. Install with: pip install python-pkcs11")
+            raise ImportError(
+                "CloudHSM key retrieval requires PKCS#11 library. "
+                "Install: pip install python-pkcs11"
+            )
+        except Exception as e:
+            logger.error(f"CloudHSM public key retrieval failed: {e}")
+            raise RuntimeError(f"CloudHSM public key retrieval failed: {e}")
 
 
 # =============================================================================
