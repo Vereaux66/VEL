@@ -96,8 +96,12 @@ class SystemConfig:
 class ModuleRegistry:
     """Registry of all VEL system modules."""
     
-    # Core modules that MUST be loaded
+    # Core modules that MUST be loaded - ALL 39 modules in the VEL system
     CORE_MODULES = [
+        # ═══════════════════════════════════════════════════════════════════
+        # ANVEL MODULES (25 total)
+        # ═══════════════════════════════════════════════════════════════════
+        
         # Event & Communication
         ("anvel_event_bus", "ANVELEventBus", "event_bus"),
         
@@ -122,18 +126,10 @@ class ModuleRegistry:
         ("anvel_strategy_core", "ANVELStrategyCore", "strategy_core"),
         ("anvel_continuous_learning", "ContinuousLearner", "learner"),
         ("anvel_analytics_core", "AnalyticsCore", "analytics"),
+        ("anvel_eternal_learning_engine", "EternalLearningEngine", "eternal_learner"),
         
-        # Execution Engine (VEL)
-        ("vel_execution_core", "VELExecutionCore", "execution_core"),
-        ("vel_execution_queue", "ExecutionQueue", "exec_queue"),
-        ("vel_risk_kernel", "RiskKernel", "risk_kernel"),
-        ("vel_signer", "TransactionSigner", "signer"),
-        ("vel_nonce_manager", "NonceManager", "nonce_manager"),
-        ("vel_state_ledger", "StateLedger", "state_ledger"),
-        ("vel_circuit_breaker", "CircuitBreaker", "circuit_breaker"),
-        ("vel_mev_protection", "MEVProtection", "mev_protection"),
-        ("vel_transaction_simulator", "TransactionSimulator", "tx_simulator"),
-        ("vel_token_registry", "TokenRegistry", "token_registry"),
+        # Utilities
+        ("anvel_dependency_utils", "LazyLoader", "lazy_loader"),
         
         # Monitoring & Safety
         ("anvel_monitoring", "ANVELMonitoring", "monitoring"),
@@ -150,6 +146,34 @@ class ModuleRegistry:
         # Smart Contracts
         ("anvel_smart_contract_manager", "SmartContractManager", "contracts"),
         ("anvel_hybrid_interfaces", "HybridInterface", "hybrid"),
+        
+        # ═══════════════════════════════════════════════════════════════════
+        # VEL EXECUTION ENGINE MODULES (14 total)
+        # ═══════════════════════════════════════════════════════════════════
+        
+        # Core Execution
+        ("vel_execution_core", "VELExecutionCore", "execution_core"),
+        ("vel_execution_queue", "ExecutionQueue", "exec_queue"),
+        
+        # Risk & Safety
+        ("vel_risk_kernel", "RiskKernel", "risk_kernel"),
+        ("vel_circuit_breaker", "CircuitBreaker", "circuit_breaker"),
+        
+        # Transaction Management
+        ("vel_signer", "TransactionSigner", "signer"),
+        ("vel_nonce_manager", "NonceManager", "nonce_manager"),
+        ("vel_state_ledger", "StateLedger", "state_ledger"),
+        ("vel_transaction_simulator", "TransactionSimulator", "tx_simulator"),
+        
+        # Token & Registry
+        ("vel_token_registry", "TokenRegistry", "token_registry"),
+        
+        # Protection & Resilience
+        ("vel_mev_protection", "MEVProtection", "mev_protection"),
+        ("vel_backpressure", "BackpressureController", "backpressure"),
+        ("vel_chain_finality", "ChainFinalityTracker", "chain_finality"),
+        ("vel_chaos_scenarios", "ChaosScenarioRunner", "chaos_runner"),
+        ("vel_operational_controls", "OperationalControls", "ops_controls"),
     ]
     
     def __init__(self):
