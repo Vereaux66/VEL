@@ -246,6 +246,11 @@ class SystemWiring:
         self.config = config
         self.instances: Dict[str, Any] = {}
     
+    @property
+    def wired_instances(self) -> Dict[str, Any]:
+        """Alias for instances for compatibility."""
+        return self.instances
+    
     def wire(self) -> bool:
         """Wire all modules together."""
         logger.info("Wiring system components...")
@@ -424,6 +429,10 @@ class VELSystem:
         for name in self.wiring.instances:
             print(f"  ✓ {name}")
         print()
+    
+    def wire(self) -> bool:
+        """Convenience method to re-wire the system."""
+        return self.wiring.wire()
     
     def start(self):
         """Start the system."""
