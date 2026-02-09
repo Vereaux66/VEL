@@ -152,15 +152,15 @@ class ModuleRegistry:
         # ═══════════════════════════════════════════════════════════════════
         
         # Core Execution
-        ("vel_execution_core", "VELExecutionCore", "execution_core"),
+        ("vel_execution_core", "ExecutionCore", "execution_core"),
         ("vel_execution_queue", "ExecutionQueue", "exec_queue"),
         
         # Risk & Safety
         ("vel_risk_kernel", "RiskKernel", "risk_kernel"),
-        ("vel_circuit_breaker", "CircuitBreaker", "circuit_breaker"),
+        ("vel_circuit_breaker", "CircuitBreakerManager", "circuit_breaker"),
         
         # Transaction Management
-        ("vel_signer", "TransactionSigner", "signer"),
+        ("vel_signer", "SignerInterface", "signer"),
         ("vel_nonce_manager", "NonceManager", "nonce_manager"),
         ("vel_state_ledger", "StateLedger", "state_ledger"),
         ("vel_transaction_simulator", "TransactionSimulator", "tx_simulator"),
@@ -169,11 +169,11 @@ class ModuleRegistry:
         ("vel_token_registry", "TokenRegistry", "token_registry"),
         
         # Protection & Resilience
-        ("vel_mev_protection", "MEVProtection", "mev_protection"),
-        ("vel_backpressure", "BackpressureController", "backpressure"),
+        ("vel_mev_protection", "MEVProtectionConfig", "mev_protection"),
+        ("vel_backpressure", "BackpressureConfig", "backpressure"),
         ("vel_chain_finality", "ChainFinalityTracker", "chain_finality"),
         ("vel_chaos_scenarios", "ChaosScenarioRunner", "chaos_runner"),
-        ("vel_operational_controls", "OperationalControls", "ops_controls"),
+        ("vel_operational_controls", "OperationalController", "ops_controls"),
     ]
     
     def __init__(self):

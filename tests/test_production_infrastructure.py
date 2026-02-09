@@ -48,8 +48,8 @@ class TestVELCircuitBreaker(unittest.TestCase):
     @unittest.skipUnless(module_available('vel_circuit_breaker'), "vel_circuit_breaker not available")
     def test_circuit_breaker_import(self):
         """Test that circuit breaker can be imported."""
-        from vel_circuit_breaker import CircuitBreaker
-        self.assertTrue(hasattr(CircuitBreaker, '__init__'))
+        from vel_circuit_breaker import CircuitBreakerManager
+        self.assertTrue(hasattr(CircuitBreakerManager, '__init__'))
 
 
 class TestVELExecutionCore(unittest.TestCase):
@@ -59,8 +59,8 @@ class TestVELExecutionCore(unittest.TestCase):
     def test_execution_core_import(self):
         """Test that execution core can be imported."""
         try:
-            from vel_execution_core import VELExecutionCore
-            self.assertTrue(True)
+            from vel_execution_core import ExecutionCore
+            self.assertTrue(hasattr(ExecutionCore, '__init__'))
         except ImportError as e:
             # web3 dependency may not be installed
             if 'web3' in str(e):
