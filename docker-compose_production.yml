@@ -196,7 +196,7 @@ services:
         --timeout 120
         --access-logfile -
         --error-logfile -
-        "webapp.app:create_app()"
+        "anvel_web_server:app"
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]
       interval: 10s
