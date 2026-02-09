@@ -190,6 +190,15 @@ SUPPORTED_DEXES: Dict[str, DEXConfig] = {
         },
         fee_tiers=[100, 500, 2500, 10000],
     ),
+    "pancakeswap_v2": DEXConfig(
+        name="PancakeSwap V2",
+        protocol_type="uniswap_v2",
+        supported_chains=[56],
+        router_addresses={
+            56: "0x10ED43C718714eb63d5aA57B78B54704E256024E",  # BSC Router V2
+        },
+        fee_tiers=[25],  # 0.25% standard
+    ),
     "sushiswap": DEXConfig(
         name="SushiSwap",
         protocol_type="uniswap_v2",
@@ -368,7 +377,7 @@ class DEXBrokerFactory:
             private_key = os.getenv("VEL_PRIVATE_KEY") or os.getenv("ANVEL_PRIVATE_KEY")
         
         try:
-            # Create appropriate broker based on protocol type
+            # Create appropriate broker based on protocol type and DEX name
             if dex_config.protocol_type == "uniswap_v3":
                 from anvel_broker_uniswap import UniswapV3Broker
                 broker = UniswapV3Broker(
@@ -376,6 +385,13 @@ class DEXBrokerFactory:
                     private_key=private_key,
                     chain_id=chain_id,
                     router_address=dex_config.router_addresses.get(chain_id),
+                )
+            elif dex_name == "pancakeswap_v2" or (dex_name.startswith("pancakeswap") and chain_id == 56):
+                # Use PancakeSwap broker for BSC
+                from anvel_broker_pancakeswap import PancakeSwapBroker
+                broker = PancakeSwapBroker(
+                    rpc_url=rpc,
+                    private_key=private_key,
                 )
             elif dex_config.protocol_type == "uniswap_v2":
                 # Use base DEX broker for V2-style

@@ -24,8 +24,17 @@ documenting what each module does, where it belongs, and its integration status.
 | `run.py` | Simple runner script | ✅ ACTIVE |
 | `wsgi.py` | WSGI application entry point | ✅ ACTIVE |
 
-### ANVEL Core Trading Modules (21 files)
+### ANVEL Core Trading Modules (24 files)
 These are the **actively imported and wired** trading system components:
+
+**NEWLY WIRED (moved from VEL-ARC):**
+| Module | Purpose | Integration Point |
+|--------|---------|-------------------|
+| `anvel_broker_uniswap.py` | Uniswap V3 DEX trading | anvel_dex_broker_factory |
+| `anvel_broker_pancakeswap.py` | PancakeSwap V2 DEX trading | anvel_dex_broker_factory |
+| `anvel_automated_executor.py` | Automated trade execution | Strategy → DEX execution |
+
+
 
 | Module | Purpose | Key Dependencies |
 |--------|---------|------------------|
@@ -221,7 +230,7 @@ Professional trading features:
 | Category | Count | Location |
 |----------|-------|----------|
 | Main System | 50 | Root |
-| Ready to Integrate | 13 | VEL-ARC/ready_to_integrate/ |
+| Ready to Integrate | 10 | VEL-ARC/ready_to_integrate/ |
 | Legacy ANVEL | 65 | VEL-ARC/legacy/anvel/ |
 | Legacy VEL | 27 | VEL-ARC/legacy/vel/ |
 | **TOTAL** | **155** | - |
