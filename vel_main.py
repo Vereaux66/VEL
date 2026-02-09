@@ -172,8 +172,14 @@ class ModuleRegistry:
         ("vel_mev_protection", "MEVProtectionConfig", "mev_protection"),
         ("vel_backpressure", "BackpressureConfig", "backpressure"),
         ("vel_chain_finality", "ChainFinalityTracker", "chain_finality"),
-        ("vel_chaos_scenarios", "ChaosScenarioRunner", "chaos_runner"),
+        ("vel_chaos_scenarios", "ChaosEngine", "chaos_runner"),
         ("vel_operational_controls", "OperationalController", "ops_controls"),
+        
+        # RPC Management
+        ("vel_rpc_manager", "RPCManager", "rpc_manager"),
+        
+        # Configuration
+        ("vel_config_validator", "ConfigValidator", "config_validator"),
     ]
     
     def __init__(self):

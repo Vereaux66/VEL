@@ -19,15 +19,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
-def module_available(module_name):
-    """Check if a module is available for import."""
-    try:
-        __import__(module_name)
-        return True
-    except ImportError:
-        return False
-
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # ACTIVE MODULE TESTS - These test modules in the main system
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -35,7 +26,6 @@ def module_available(module_name):
 class TestVELRiskKernel(unittest.TestCase):
     """Test the active risk kernel module."""
     
-    @unittest.skipUnless(module_available('vel_risk_kernel'), "vel_risk_kernel not available")
     def test_risk_kernel_import(self):
         """Test that risk kernel can be imported."""
         from vel_risk_kernel import RiskKernel
@@ -45,42 +35,37 @@ class TestVELRiskKernel(unittest.TestCase):
 class TestVELCircuitBreaker(unittest.TestCase):
     """Test the active circuit breaker module."""
     
-    @unittest.skipUnless(module_available('vel_circuit_breaker'), "vel_circuit_breaker not available")
     def test_circuit_breaker_import(self):
         """Test that circuit breaker can be imported."""
         from vel_circuit_breaker import CircuitBreakerManager
         self.assertTrue(hasattr(CircuitBreakerManager, '__init__'))
 
 
-class TestVELExecutionCore(unittest.TestCase):
-    """Test the active execution core module."""
+class TestVELExecutionQueue(unittest.TestCase):
+    """Test the active execution queue module."""
     
-    @unittest.skipUnless(module_available('vel_execution_core'), "vel_execution_core not available")
-    def test_execution_core_import(self):
-        """Test that execution core can be imported."""
-        try:
-            from vel_execution_core import ExecutionCore
-            self.assertTrue(hasattr(ExecutionCore, '__init__'))
-        except ImportError as e:
-            # web3 dependency may not be installed
-            if 'web3' in str(e):
-                self.skipTest("web3 dependency not installed")
-            raise
+    def test_execution_queue_import(self):
+        """Test that execution queue can be imported."""
+        from vel_execution_queue import ExecutionQueue
+        self.assertTrue(hasattr(ExecutionQueue, '__init__'))
 
 
-class TestVELStateLedger(unittest.TestCase):
-    """Test the active state ledger module."""
+class TestVELBackpressure(unittest.TestCase):
+    """Test the active backpressure module."""
     
-    @unittest.skipUnless(module_available('vel_state_ledger'), "vel_state_ledger not available")
-    def test_state_ledger_import(self):
-        """Test that state ledger can be imported."""
-        try:
-            from vel_state_ledger import StateLedger
-            self.assertTrue(True)
-        except ImportError as e:
-            if 'web3' in str(e):
-                self.skipTest("web3 dependency not installed")
-            raise
+    def test_backpressure_import(self):
+        """Test that backpressure config can be imported."""
+        from vel_backpressure import BackpressureConfig
+        self.assertTrue(hasattr(BackpressureConfig, '__init__'))
+
+
+class TestVELChaosScenarios(unittest.TestCase):
+    """Test the active chaos scenarios module."""
+    
+    def test_chaos_scenarios_import(self):
+        """Test that chaos engine can be imported."""
+        from vel_chaos_scenarios import ChaosEngine
+        self.assertTrue(hasattr(ChaosEngine, '__init__'))
 
 
 class TestVELMain(unittest.TestCase):
@@ -96,42 +81,53 @@ class TestVELMain(unittest.TestCase):
         """Test that module registry has expected modules."""
         from vel_main import ModuleRegistry
         registry = ModuleRegistry()
-        # Should have 39 modules defined
-        self.assertEqual(len(registry.CORE_MODULES), 39)
+        # Should have 41 modules defined (updated count)
+        self.assertEqual(len(registry.CORE_MODULES), 41)
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# ARCHIVED/REMOVED MODULE TESTS - Skipped (modules no longer in main system)
-# ═══════════════════════════════════════════════════════════════════════════════
-
-@unittest.skip("Module not in main system - archived")
-class TestRiskControls(unittest.TestCase):
-    """Test risk control engine - NOT IN MAIN SYSTEM."""
-    pass
-
-
-@unittest.skip("Module not in main system - archived")
-class TestRateLimiter(unittest.TestCase):
-    """Test rate limiter - NOT IN MAIN SYSTEM."""
-    pass
+class TestANVELEventBus(unittest.TestCase):
+    """Test the event bus module."""
+    
+    def test_event_bus_import(self):
+        """Test that event bus can be imported."""
+        from anvel_event_bus import ANVELEventBus
+        self.assertTrue(hasattr(ANVELEventBus, '__init__'))
 
 
-@unittest.skip("Module not in main system - archived")
-class TestPrometheusMetrics(unittest.TestCase):
-    """Test Prometheus metrics - NOT IN MAIN SYSTEM."""
-    pass
+class TestANVELBrokerBase(unittest.TestCase):
+    """Test the broker base module."""
+    
+    def test_broker_base_import(self):
+        """Test that broker base can be imported."""
+        from anvel_broker_base import BrokerBase
+        self.assertTrue(hasattr(BrokerBase, '__init__'))
 
 
-@unittest.skip("Module not in main system - archived")
-class TestStructuredLogging(unittest.TestCase):
-    """Test structured logging - NOT IN MAIN SYSTEM."""
-    pass
+class TestANVELDexBrokerFactory(unittest.TestCase):
+    """Test the dex broker factory module."""
+    
+    def test_dex_broker_factory_import(self):
+        """Test that dex broker factory can be imported."""
+        from anvel_dex_broker_factory import DEXBrokerFactory
+        self.assertTrue(hasattr(DEXBrokerFactory, '__init__'))
 
 
-@unittest.skip("Module not in main system - archived")
-class TestAISafety(unittest.TestCase):
-    """Test AI safety constraints - NOT IN MAIN SYSTEM."""
-    pass
+class TestVELConfigValidator(unittest.TestCase):
+    """Test the config validator module."""
+    
+    def test_config_validator_import(self):
+        """Test that config validator can be imported."""
+        from vel_config_validator import ConfigValidator
+        self.assertTrue(hasattr(ConfigValidator, '__init__'))
+
+
+class TestVELRPCManager(unittest.TestCase):
+    """Test the RPC manager module."""
+    
+    def test_rpc_manager_import(self):
+        """Test that RPC manager can be imported."""
+        from vel_rpc_manager import RPCManager
+        self.assertTrue(hasattr(RPCManager, '__init__'))
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
