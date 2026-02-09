@@ -243,9 +243,8 @@ class PancakeSwapBroker(DEXBrokerBase):
                     quote_direct = self.get_quote(token_in, token_out, amount_in, None)
                     if quote_direct['status'] == 'success':
                         path = [token_in, token_out]
-                except:
-                    import logging as _lg  # noqa: E402
-                    _lg.getLogger("ANVEL_BROKER_PANCAKESWAP").debug("Exception suppressed in execute_swap")
+                except Exception:
+                    logger.debug("Direct quote failed, will try via WBNB")
 
                 # If direct doesn't work, try via WBNB
                 if path is None:
