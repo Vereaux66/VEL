@@ -104,7 +104,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: ["python", "-m", "flask", "--app", "webapp.app", "run", "--host", "0.0.0.0", "--port", "8080", "--no-reload"]
+    command: ["python", "-c", "from anvel_web_server import app; app.run(host='0.0.0.0', port=8080)"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s

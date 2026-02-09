@@ -104,7 +104,7 @@ services:
       - REDIS_PORT=6379
       - REDIS_PASSWORD=${REDIS_PASSWORD:-AnvelRedis2024!}
       - ANVEL_WEB_PASSWORD=${ANVEL_WEB_PASSWORD:?ANVEL_WEB_PASSWORD must be set in environment}
-      - FLASK_APP=webapp.app
+      - FLASK_APP=anvel_web_server
       - FLASK_ENV=${FLASK_ENV:-production}
     ports:
       - "8080:8080"

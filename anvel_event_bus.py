@@ -7,6 +7,9 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError
 
 logger = logging.getLogger(__name__)
 
+# Backwards compatible alias
+EventBus = None  # Will be set at module load
+
 
 class ANVELEventBus:
     def __init__(
@@ -218,3 +221,7 @@ class AnvelEventBus(ANVELEventBus):
         self.active = False
         self.close()
         return "[EVENT BUS] stopped"
+
+# Backwards compatible alias
+EventBus = ANVELEventBus
+

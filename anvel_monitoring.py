@@ -81,6 +81,8 @@ class ANVELHeartbeatMonitor:
 class ANVELHealthMonitor:
     def __init__(self):
         self.checks = []
+        self._metrics_server = None
+        self._metrics_thread = None
 
     def check(self, name, fn):
         status = "OK" if fn() else "FAIL"
@@ -89,6 +91,81 @@ class ANVELHealthMonitor:
 
     def summary(self):
         return self.checks[-5:]
+    
+    def serve_metrics(self, port: int = 9090, host: str = "0.0.0.0"):
+        """
+        Serve Prometheus-compatible metrics on the specified port.
+        
+        This method starts an HTTP server that exposes health metrics
+        in a format compatible with Prometheus scraping.
+        
+        Args:
+            port: Port to serve metrics on (default: 9090)
+            host: Host to bind to (default: 0.0.0.0)
+        """
+        import http.server
+        import socketserver
+        
+        monitor = self
+        
+        class MetricsHandler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                if self.path == '/metrics' or self.path == '/':
+                    self.send_response(200)
+                    self.send_header('Content-type', 'text/plain')
+                    self.end_headers()
+                    
+                    # Generate Prometheus-format metrics
+                    metrics = []
+                    metrics.append("# HELP vel_health_check Health check status (1=OK, 0=FAIL)")
+                    metrics.append("# TYPE vel_health_check gauge")
+                    
+                    for name, status, timestamp in monitor.checks[-100:]:
+                        value = 1 if status == "OK" else 0
+                        safe_name = name.replace(" ", "_").replace("-", "_").lower()
+                        metrics.append(f'vel_health_check{{name="{safe_name}"}} {value}')
+                    
+                    metrics.append("")
+                    metrics.append("# HELP vel_health_checks_total Total health checks performed")
+                    metrics.append("# TYPE vel_health_checks_total counter")
+                    metrics.append(f"vel_health_checks_total {len(monitor.checks)}")
+                    
+                    self.wfile.write("\n".join(metrics).encode())
+                elif self.path == '/health':
+                    self.send_response(200)
+                    self.send_header('Content-type', 'application/json')
+                    self.end_headers()
+                    
+                    health = {
+                        "status": "healthy",
+                        "checks": len(monitor.checks),
+                        "recent": monitor.summary()
+                    }
+                    self.wfile.write(json.dumps(health).encode())
+                else:
+                    self.send_response(404)
+                    self.end_headers()
+            
+            def log_message(self, format, *args):
+                pass  # Suppress logging
+        
+        def run_server():
+            with socketserver.TCPServer((host, port), MetricsHandler) as httpd:
+                self._metrics_server = httpd
+                print(f"[HEALTH] Metrics server running on {host}:{port}")
+                httpd.serve_forever()
+        
+        self._metrics_thread = threading.Thread(target=run_server, daemon=True)
+        self._metrics_thread.start()
+        
+        # Block to keep the server running when called directly
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            if self._metrics_server:
+                self._metrics_server.shutdown()
+            print("[HEALTH] Metrics server stopped")
 
 
 class ANVELSelfDiagnostics:

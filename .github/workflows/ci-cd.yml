@@ -68,13 +68,13 @@ jobs:
 
       - name: Run Bandit (security linter)
         run: |
-          bandit -r . -x ./tests,./frontend,./VEL_ARC -f json -o bandit-report.json
+          bandit -r . -x ./tests,./frontend,./VEL-ARC -f json -o bandit-report.json
           # Fail on high severity issues
-          if bandit -r . -x ./tests,./frontend,./VEL_ARC -ll --exit-zero | grep -E "Severity: High"; then
+          if bandit -r . -x ./tests,./frontend,./VEL-ARC -ll --exit-zero | grep -E "Severity: High"; then
             echo "::error::High severity security issues found"
             exit 1
           fi
-          bandit -r . -x ./tests,./frontend,./VEL_ARC -ll
+          bandit -r . -x ./tests,./frontend,./VEL-ARC -ll
 
       - name: Enforce DEX-only policy (no CEX modules)
         run: |
@@ -93,7 +93,7 @@ jobs:
             exit 1
           fi
           # Check for CEX imports in Python files
-          if grep -r "from anvel_broker_coinbase\|from anvel_broker_kraken\|import anvel_broker_coinbase\|import anvel_broker_kraken" --include="*.py" . 2>/dev/null | grep -v "VEL_ARC" | grep -v "^Binary"; then
+          if grep -r "from anvel_broker_coinbase\|from anvel_broker_kraken\|import anvel_broker_coinbase\|import anvel_broker_kraken" --include="*.py" . 2>/dev/null | grep -v "VEL-ARC" | grep -v "^Binary"; then
             echo "ERROR: CEX broker imports detected!"
             echo "VEL enforces DEX-only trading. Remove CEX imports."
             exit 1

@@ -529,15 +529,15 @@ class SelfHealer:
         """Check ANVEL modules and identify broken ones"""
         status("Checking ANVEL modules...", "WORKING")
 
+        # Only check modules that are actually in the main system
         critical_modules = [
-            "anvel_brain",
             "anvel_event_bus",
-            "anvel_memory",
-            "anvel_trade_engine",
-            "anvel_security_layer",
-            "anvel_system_orchestrator",
-            "anvel_monitoring",
-            "anvel_consciousness",
+            "anvel_market_data",
+            "anvel_broker_factory",
+            "anvel_dex_broker_factory",
+            "anvel_pooled_trading_engine",
+            "vel_execution_core",
+            "vel_risk_kernel",
         ]
 
         working = []
@@ -594,18 +594,13 @@ class ModuleLoader:
         broker = config.get("trading_config", {}).get("broker", "uniswap_v3")  # DEX-only
         status(f"Watchlist: {len(watchlist)} symbols, DEX Broker: {broker}", "INFO")
 
+        # Only load modules that are actually in the main system
         module_classes = {
-            "anvel_monitoring": [
-                "ANVELWatchdog",
-                "ANVELHeartbeatMonitor",
-                "ANVELHealthMonitor",
-            ],
             "anvel_event_bus": ["ANVELEventBus"],
-            "anvel_brain": ["ANVELBrain"],
-            "anvel_memory": ["ANVELMemory"],
-            "anvel_consciousness": ["ANVELConsciousness"],
-            "anvel_trade_engine": ["ANVELTradeEngine"],
-            "anvel_security_layer": ["ANVELSecurityLayer"],
+            "anvel_market_data": ["ANVELMarketData"],
+            "anvel_dex_broker_factory": ["DEXBrokerFactory"],
+            "vel_execution_core": ["VELExecutionCore"],
+            "vel_risk_kernel": ["RiskKernel"],
         }
 
         # Track event bus for market data
@@ -623,11 +618,7 @@ class ModuleLoader:
                         cls = getattr(mod, class_name)
 
                         # Initialize with appropriate parameters
-                        if class_name == "ANVELWatchdog":
-                            instance = cls(timeout=60)
-                        elif class_name == "ANVELHeartbeatMonitor":
-                            instance = cls(interval=10)
-                        elif class_name == "ANVELEventBus":
+                        if class_name == "ANVELEventBus":
                             instance = cls()
                             event_bus_instance = instance
                         else:
@@ -636,9 +627,8 @@ class ModuleLoader:
                         self.modules.append(instance)
 
                     except AttributeError:
-                        # Class doesn't exist in module
-                        import logging as _lg  # noqa: E402
-                        _lg.getLogger("ANVEL_MASTER").debug("Exception suppressed in load_all")
+                        # Class doesn't exist in module - skip silently
+                        pass
                     except Exception as e:
                         status(
                             f"Failed to initialize {class_name}: {str(e)[:50]}",

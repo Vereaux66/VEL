@@ -1,16 +1,20 @@
-# VEL Trading Platform - Terraform State Infrastructure
-# Bootstrap resources for state management (run this first)
+# ═══════════════════════════════════════════════════════════════════════════════
+# VEL TERRAFORM STATE BOOTSTRAP
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# This module creates the S3 bucket and DynamoDB table required for
+# Terraform remote state management. Run this FIRST before main infrastructure.
 #
 # Usage:
 #   cd aws/terraform/bootstrap
 #   terraform init
-#   terraform apply -var="bucket_suffix=mycompany"
+#   terraform apply
 #
-# After this is created, update providers.tf to use the S3 backend.
+# After this completes, uncomment the backend block in providers.tf
+# ═══════════════════════════════════════════════════════════════════════════════
 
 terraform {
   required_version = ">= 1.5"
-
   required_providers {
     aws = {
       source  = "hashicorp/aws"
@@ -19,26 +23,6 @@ terraform {
   }
 }
 
-variable "bucket_suffix" {
-  description = "Unique suffix for S3 bucket name (e.g., account ID, company name)"
-  type        = string
-  default     = ""
-}
-
-variable "aws_region" {
-  description = "AWS region for state resources"
-  type        = string
-  default     = "us-east-1"
-}
-
-locals {
-  # Generate a unique bucket name using account ID if no suffix provided
-  bucket_name = var.bucket_suffix != "" ? "vel-terraform-state-${var.bucket_suffix}" : "vel-terraform-state-${data.aws_caller_identity.current.account_id}"
-  lock_table_name = var.bucket_suffix != "" ? "vel-terraform-locks-${var.bucket_suffix}" : "vel-terraform-locks"
-}
-
-data "aws_caller_identity" "current" {}
-
 provider "aws" {
   region = var.aws_region
 
@@ -46,35 +30,52 @@ provider "aws" {
     tags = {
       Project   = "VEL-Trading"
       ManagedBy = "Terraform"
-      Purpose   = "StateManagement"
+      Component = "State-Management"
     }
   }
 }
 
-# S3 bucket for Terraform state
-resource "aws_s3_bucket" "terraform_state" {
-  bucket = local.bucket_name
+variable "aws_region" {
+  description = "AWS region for state bucket"
+  type        = string
+  default     = "us-east-1"
+}
 
-  # Prevent accidental deletion
+variable "state_bucket_name" {
+  description = "Name of the S3 bucket for Terraform state"
+  type        = string
+  default     = "vel-terraform-state"
+}
+
+variable "lock_table_name" {
+  description = "Name of the DynamoDB table for state locking"
+  type        = string
+  default     = "vel-terraform-locks"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# S3 Bucket for Terraform State
+# ─────────────────────────────────────────────────────────────────────────────
+
+resource "aws_s3_bucket" "terraform_state" {
+  bucket = var.state_bucket_name
+
   lifecycle {
     prevent_destroy = true
   }
 
   tags = {
-    Name = local.bucket_name
+    Name = "VEL Terraform State"
   }
 }
 
-# Enable versioning for state recovery
 resource "aws_s3_bucket_versioning" "terraform_state" {
   bucket = aws_s3_bucket.terraform_state.id
-
   versioning_configuration {
     status = "Enabled"
   }
 }
 
-# Enable server-side encryption
 resource "aws_s3_bucket_server_side_encryption_configuration" "terraform_state" {
   bucket = aws_s3_bucket.terraform_state.id
 
@@ -86,7 +87,6 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "terraform_state" 
   }
 }
 
-# Block all public access
 resource "aws_s3_bucket_public_access_block" "terraform_state" {
   bucket = aws_s3_bucket.terraform_state.id
 
@@ -96,9 +96,12 @@ resource "aws_s3_bucket_public_access_block" "terraform_state" {
   restrict_public_buckets = true
 }
 
-# DynamoDB table for state locking
+# ─────────────────────────────────────────────────────────────────────────────
+# DynamoDB Table for State Locking
+# ─────────────────────────────────────────────────────────────────────────────
+
 resource "aws_dynamodb_table" "terraform_locks" {
-  name         = local.lock_table_name
+  name         = var.lock_table_name
   billing_mode = "PAY_PER_REQUEST"
   hash_key     = "LockID"
 
@@ -107,17 +110,15 @@ resource "aws_dynamodb_table" "terraform_locks" {
     type = "S"
   }
 
-  # Point-in-time recovery for lock table
-  point_in_time_recovery {
-    enabled = true
-  }
-
   tags = {
-    Name = local.lock_table_name
+    Name = "VEL Terraform State Locks"
   }
 }
 
+# ─────────────────────────────────────────────────────────────────────────────
 # Outputs
+# ─────────────────────────────────────────────────────────────────────────────
+
 output "state_bucket_name" {
   description = "Name of the S3 bucket for Terraform state"
   value       = aws_s3_bucket.terraform_state.id
@@ -136,13 +137,18 @@ output "lock_table_name" {
 output "backend_config" {
   description = "Backend configuration to add to providers.tf"
   value       = <<-EOT
-    # Add this to your terraform block in providers.tf:
-    backend "s3" {
-      bucket         = "${aws_s3_bucket.terraform_state.id}"
-      key            = "prod/infrastructure.tfstate"
-      region         = "us-east-1"
-      encrypt        = true
-      dynamodb_table = "${aws_dynamodb_table.terraform_locks.name}"
+    
+    # Add this to aws/terraform/providers.tf after running bootstrap:
+    
+    terraform {
+      backend "s3" {
+        bucket         = "${aws_s3_bucket.terraform_state.id}"
+        key            = "production/terraform.tfstate"
+        region         = "${var.aws_region}"
+        encrypt        = true
+        dynamodb_table = "${aws_dynamodb_table.terraform_locks.name}"
+      }
     }
+    
   EOT
 }
